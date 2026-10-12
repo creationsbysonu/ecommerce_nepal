@@ -37,6 +37,9 @@ yarn-error.log*
 # local notes contain SMTP + Turnstile secrets — never commit
 notes.txt
 
+# Render deployment secrets (npm run db:keys)
+.render-secrets/
+
 # supabase local config contains SMTP credentials — do not commit
 supabase/config.toml
 

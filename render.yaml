@@ -1,7 +1,114 @@
-# Render Blueprint — Mero Pasal
-# Deploys the Next.js app (frontend + API routes) as a Node web service.
-# Database + Auth come from Supabase Cloud (set its URL/keys as env vars below).
+# Render Blueprint — Mero Pasal (everything on Render)
+#
+# Services:
+#   meropasal-db      Free Postgres (schema via `npm run db:render`) — EXPIRES AFTER 30 DAYS
+#   mero-pasal-auth   GoTrue   (supabase/auth)  -> /auth/v1  (OTP login, sessions)
+#   mero-pasal-rest   PostgREST                 -> /rest/v1  (.from() queries + RLS)
+#   mero-pasal        Next.js app               -> frontend + API routes
+#
+# Before applying: run `npm run db:keys` and keep .render-secrets/keys.txt open —
+# Render prompts for every "sync: false" value below during blueprint apply.
+
+databases:
+  - name: meropasal-db
+    plan: free
+    databaseName: meropasal
+
+envVarGroups:
+  # Pasted into ONE prompt screen when applying the blueprint.
+  - name: meropasal-auth-secrets
+    envVars:
+      - key: GOTRUE_JWT_SECRET        # from keys.txt (same value as PGRST_JWT_SECRET)
+        sync: false
+      - key: GOTRUE_SMTP_HOST         # e.g. smtp.sendgrid.net (port 587 is BLOCKED on free tier!)
+        sync: false
+      - key: GOTRUE_SMTP_PORT         # 2525 for SendGrid/Mailgun free tier, 587 on paid instances
+        sync: false
+      - key: GOTRUE_SMTP_USER         # e.g. apikey (SendGrid) or postmaster@... (Mailgun)
+        sync: false
+      - key: GOTRUE_SMTP_PASS         # the provider's SMTP password
+        sync: false
+      - key: GOTRUE_SMTP_ADMIN_EMAIL  # mailbox for GoTrue error reports
+        sync: false
+  - name: meropasal-api-secrets
+    envVars:
+      - key: PGRST_JWT_SECRET             # from keys.txt (same value as GOTRUE_JWT_SECRET)
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY # from keys.txt (anon JWT)
+        sync: false
+      - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY # from notes.txt / Cloudflare dashboard
+        sync: false
+      - key: TURNSTILE_SECRET_KEY          # from notes.txt / Cloudflare dashboard
+        sync: false
+
 services:
+  # ── GoTrue: Supabase Auth (OTP login, sessions, JWTs) ──────────────
+  - type: web
+    name: mero-pasal-auth
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/gotrue/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: meropasal-auth-secrets
+      - key: GOTRUE_DB_DATABASE_URL
+        fromDatabase:
+          name: meropasal-db
+          property: connectionString
+      - key: GOTRUE_DB_DRIVER
+        value: postgres
+      - key: GOTRUE_API_HOST
+        value: 0.0.0.0
+      - key: GOTRUE_API_PORT
+        value: 10000
+      - key: GOTRUE_SITE_URL
+        value: https://mero-pasal.onrender.com
+      - key: GOTRUE_URI_ALLOW_LIST
+        value: https://mero-pasal.onrender.com/*
+      - key: GOTRUE_JWT_ISSUER
+        value: https://mero-pasal.onrender.com
+      - key: GOTRUE_JWT_EXP
+        value: "3600"
+      - key: GOTRUE_JWT_AUD
+        value: authenticated
+      - key: GOTRUE_JWT_ADMIN_ROLES
+        value: service_role
+      - key: GOTRUE_JWT_DEFAULT_GROUP_NAME
+        value: authenticated
+      - key: GOTRUE_EXTERNAL_EMAIL_ENABLED
+        value: "true"
+      - key: GOTRUE_MAILER_AUTOCONFIRM
+        value: "true"
+      - key: GOTRUE_DISABLE_SIGNUP
+        value: "false"
+      - key: GOTRUE_OTP_EXPIRY
+        value: "3600"
+      - key: GOTRUE_SMTP_MAX_FREQUENCY
+        value: 1s
+      - key: GOTRUE_SMTP_SENDER_NAME
+        value: Mero Pasal
+
+  # ── PostgREST: serves .from() queries with RLS ─────────────────────
+  - type: web
+    name: mero-pasal-rest
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/postgrest/Dockerfile
+    healthCheckPath: /
+    envVars:
+      - fromGroup: meropasal-api-secrets
+      - key: PGRST_DB_URI
+        fromDatabase:
+          name: meropasal-db
+          property: connectionString
+      - key: PGRST_DB_SCHEMAS
+        value: public
+      - key: PGRST_DB_ANON_ROLE
+        value: anon
+      - key: PGRST_SERVER_PORT
+        value: "10000"
+
+  # ── Next.js app: frontend + /api routes ────────────────────────────
   - type: web
     name: mero-pasal
     runtime: node
@@ -10,21 +117,12 @@ services:
     startCommand: npm start
     healthCheckPath: /
     envVars:
-      # — Supabase Cloud (Dashboard → Project Settings → API) —
+      - fromGroup: meropasal-api-secrets
       - key: NEXT_PUBLIC_SUPABASE_URL
-        sync: false
-      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
-        sync: false
-      # — Cloudflare Turnstile (dashboard.cloudflare.com → Turnstile) —
-      - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY
-        sync: false
-      - key: TURNSTILE_SECRET_KEY
-        sync: false
-      # — App —
+        value: https://mero-pasal.onrender.com   # app proxies /auth/v1 + /rest/v1 itself
+      - key: GOTRUE_UPSTREAM
+        value: https://mero-pasal-auth.onrender.com
+      - key: POSTGREST_UPSTREAM
+        value: https://mero-pasal-rest.onrender.com
       - key: NODE_ENV
         value: production
-      # Optional: only needed if you run SMTP-based flows from the app itself
-      - key: GMAIL_SMTP_USER
-        sync: false
-      - key: GMAIL_SMTP_PASSWORD
-        sync: false
