@@ -8,8 +8,32 @@ import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { Tag, Coins, Wallet, CheckCircle, AlertCircle } from 'lucide-react';
 
+type Address = {
+  id: string;
+  full_name: string;
+  phone_number: string;
+  street_address: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  is_default: boolean;
+};
+
+type Coupon = {
+  id: string;
+  code: string;
+  description: string | null;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  min_order_amount: number;
+  max_discount_amount: number | null;
+  max_uses: number | null;
+  used_count: number;
+  expires_at: string | null;
+};
+
 export default function CheckoutPage() {
-  const [addresses, setAddresses] = useState<any[]>([]);
+  const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [placingOrder, setPlacingOrder] = useState(false);
@@ -28,7 +52,7 @@ export default function CheckoutPage() {
 
   // Coupon State
   const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -216,7 +240,7 @@ export default function CheckoutPage() {
           
           {addresses.length === 0 ? (
             <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '4px', textAlign: 'center' }}>
-              <p style={{ marginBottom: '16px' }}>You haven't added a delivery address yet.</p>
+              <p style={{ marginBottom: '16px' }}>You haven&apos;t added a delivery address yet.</p>
               <Link href="/profile/addresses">
                 <Button>Add New Address</Button>
               </Link>

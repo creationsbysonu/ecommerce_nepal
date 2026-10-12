@@ -28,7 +28,7 @@ export default function SupportPage() {
         </div>
         <h1 style={{ fontSize: '32px', fontWeight: 800, color: '#212121', marginBottom: '12px' }}>24x7 Customer Support</h1>
         <p style={{ fontSize: '16px', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto' }}>
-          We're here to help you with anything you need. Reach out to us via phone, email, or send us a direct message below.
+          We&apos;re here to help you with anything you need. Reach out to us via phone, email, or send us a direct message below.
         </p>
       </div>
 
@@ -57,7 +57,7 @@ export default function SupportPage() {
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <CheckCircle size={48} color="#10b981" style={{ margin: '0 auto 16px' }} />
               <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Message Sent!</h3>
-              <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>We'll get back to you shortly.</p>
+              <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>We&apos;ll get back to you shortly.</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

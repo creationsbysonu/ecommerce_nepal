@@ -3,6 +3,15 @@ import { redirect } from 'next/navigation';
 import styles from '../profile.module.css';
 import { Package } from 'lucide-react';
 
+type OrderRow = {
+  id: string;
+  status: string;
+  total_amount: number | string;
+  created_at: string;
+  shipping_address: { full_name?: string; city?: string } | null;
+  order_items?: { id: string }[] | null;
+};
+
 export default async function OrdersPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -22,11 +31,11 @@ export default async function OrdersPage() {
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
           <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
           <h3>No Orders Found</h3>
-          <p>You haven't placed any orders yet.</p>
+          <p>You haven&apos;t placed any orders yet.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {orders.map((order: any) => (
+          {orders.map((order: OrderRow) => (
             <div key={order.id} className={styles.addressCard}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '12px' }}>
                 <div>

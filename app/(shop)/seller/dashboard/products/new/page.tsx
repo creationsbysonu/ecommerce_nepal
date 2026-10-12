@@ -10,7 +10,7 @@ export default function NewProduct() {
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -25,8 +25,11 @@ export default function NewProduct() {
     supabase.from('categories').select('*').then(({ data }) => {
       if (data) setCategories(data);
     });
-    // Generate random SKU
-    setSku('SKU-' + Math.random().toString(36).substring(2, 8).toUpperCase());
+    // Generate random SKU after mount (deferred so the effect doesn't
+    // trigger a cascading render; '' during SSR avoids hydration mismatch).
+    queueMicrotask(() => {
+      setSku('SKU-' + Math.random().toString(36).substring(2, 8).toUpperCase());
+    });
   }, [supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,8 +74,9 @@ export default function NewProduct() {
 
       router.push('/seller/dashboard/products');
       
-    } catch (err: any) {
-      alert("Error: " + err.message);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      alert("Error: " + message);
       setLoading(false);
     }
   };

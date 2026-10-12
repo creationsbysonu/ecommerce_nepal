@@ -41,7 +41,7 @@ export default async function CategoryPage({ params }: { params: { slug: string 
         <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--text-muted)' }}>
           <LayoutGrid size={64} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
           <h2 style={{ fontSize: '20px', fontWeight: 600 }}>No products found</h2>
-          <p>We couldn't find any products in this category right now.</p>
+          <p>We couldn&apos;t find any products in this category right now.</p>
         </div>
       ) : (
         <div style={{ 

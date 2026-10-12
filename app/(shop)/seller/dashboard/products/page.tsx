@@ -2,46 +2,66 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { asRows } from '@/utils/supabase/rows';
 import Link from 'next/link';
 import { Plus, Edit, Trash2, Package } from 'lucide-react';
 import Image from 'next/image';
 
+type SellerProductRow = {
+  id: string;
+  title: string;
+  base_price: number;
+  is_active: boolean;
+  created_at: string;
+  categories: { name: string } | null;
+  product_variants: { id: string; stock: number; image_url: string | null; sku: string }[] | null;
+};
+
 export default function SellerProducts() {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<SellerProductRow[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
-  const fetchProducts = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+  useEffect(() => {
+    // Loader inlined into the effect (setState runs only after awaits resolve).
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    const { data: store } = await supabase.from('stores').select('id').eq('seller_id', user.id).single();
-    if (!store) return;
+      const { data: store } = await supabase.from('stores').select('id').eq('seller_id', user.id).single();
+      if (!store) return;
 
-    const { data } = await supabase
-      .from('products')
-      .select(`
-        id, title, base_price, is_active, created_at,
-        categories (name),
-        product_variants (id, stock, image_url, sku)
-      `)
-      .eq('store_id', store.id)
-      .order('created_at', { ascending: false });
+      const { data } = await supabase
+        .from('products')
+        .select(`
+          id, title, base_price, is_active, created_at,
+          categories (name),
+          product_variants (id, stock, image_url, sku)
+        `)
+        .eq('store_id', store.id)
+        .order('created_at', { ascending: false });
 
-    if (data) setProducts(data);
-    setLoading(false);
-  };
-
-  useEffect(() => { fetchProducts(); }, [supabase]);
+      if (data) setProducts(asRows<SellerProductRow>(data));
+      setLoading(false);
+    })();
+  }, [supabase]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this product?')) return;
-    await supabase.from('products').delete().eq('id', id);
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) {
+      alert(`Could not delete product: ${error.message}`);
+      return;
+    }
     setProducts(products.filter(p => p.id !== id));
   };
 
   const toggleActive = async (id: string, currentStatus: boolean) => {
-    await supabase.from('products').update({ is_active: !currentStatus }).eq('id', id);
+    const { error } = await supabase.from('products').update({ is_active: !currentStatus }).eq('id', id);
+    if (error) {
+      alert(`Could not update product: ${error.message}`);
+      return;
+    }
     setProducts(products.map(p => p.id === id ? { ...p, is_active: !currentStatus } : p));
   };
 

@@ -66,7 +66,7 @@ export default function SellerDashboard() {
     <div>
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#0f172a' }}>Dashboard Overview</h1>
-        <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>Welcome back. Here's what's happening with your store today.</p>
+        <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>Welcome back. Here&apos;s what&apos;s happening with your store today.</p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px', marginBottom: '40px' }}>

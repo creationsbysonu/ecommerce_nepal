@@ -73,9 +73,10 @@ export default function SellerRegistration() {
       alert("Registration successful! Welcome to the Seller Portal.");
       window.location.href = '/seller/dashboard'; // Full reload to ensure role updates propagate to layout
 
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError(err.message || "An error occurred during registration.");
+      const message = err instanceof Error ? err.message : 'An error occurred during registration.';
+      setError(message);
       setSubmitting(false);
     }
   };

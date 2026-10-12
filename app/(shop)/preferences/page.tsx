@@ -3,6 +3,30 @@
 import { useState } from 'react';
 import { BellRing, Mail, Smartphone, Bell, CheckCircle } from 'lucide-react';
 
+interface ToggleSwitchProps {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: () => void;
+}
+
+function ToggleSwitch({ label, desc, checked, onChange }: ToggleSwitchProps) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid var(--border)' }}>
+      <div>
+        <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#212121' }}>{label}</h4>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{desc}</p>
+      </div>
+      <button 
+        onClick={onChange}
+        style={{ width: '44px', height: '24px', background: checked ? 'var(--brand-blue)' : '#cbd5e1', borderRadius: '12px', position: 'relative', cursor: 'pointer', border: 'none', transition: 'background 0.2s' }}
+      >
+        <div style={{ width: '20px', height: '20px', background: 'white', borderRadius: '50%', position: 'absolute', top: '2px', left: checked ? '22px' : '2px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+      </button>
+    </div>
+  );
+}
+
 export default function PreferencesPage() {
   const [prefs, setPrefs] = useState({
     email_orders: true,
@@ -25,21 +49,6 @@ export default function PreferencesPage() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
-
-  const ToggleSwitch = ({ label, desc, checked, onChange }: any) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid var(--border)' }}>
-      <div>
-        <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#212121' }}>{label}</h4>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{desc}</p>
-      </div>
-      <button 
-        onClick={onChange}
-        style={{ width: '44px', height: '24px', background: checked ? 'var(--brand-blue)' : '#cbd5e1', borderRadius: '12px', position: 'relative', cursor: 'pointer', border: 'none', transition: 'background 0.2s' }}
-      >
-        <div style={{ width: '20px', height: '20px', background: 'white', borderRadius: '50%', position: 'absolute', top: '2px', left: checked ? '22px' : '2px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-      </button>
-    </div>
-  );
 
   return (
     <div className="container" style={{ padding: '40px 16px', maxWidth: '800px' }}>

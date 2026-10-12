@@ -3,16 +3,20 @@
 import Link from 'next/link';
 import { ShoppingCart } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import styles from '../../app/(shop)/shop.module.css';
 
-export function CartIcon() {
-  const [mounted, setMounted] = useState(false);
-  const itemsCount = useCartStore((state) => state.getTotalItems());
+// Hydration-safe "mounted" flag: false during SSR, true on the client.
+// (localStorage-backed cart state is only readable after hydration.)
+const subscribeMounted = () => () => {};
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+export function CartIcon() {
+  const mounted = useSyncExternalStore(
+    subscribeMounted,
+    () => true,
+    () => false
+  );
+  const itemsCount = useCartStore((state) => state.getTotalItems());
 
   return (
     <Link href="/cart" className={styles.cartBtn} style={{ position: 'relative' }}>

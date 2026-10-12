@@ -35,7 +35,6 @@ export default function AddressesPage() {
   });
 
   const fetchAddresses = async () => {
-    setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -50,8 +49,20 @@ export default function AddressesPage() {
   };
 
   useEffect(() => {
-    fetchAddresses();
-  }, []);
+    // Loader inlined into the effect: setState only runs after the awaited
+    // requests resolve (react-hooks/set-state-in-effect).
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('addresses')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('is_default', { ascending: false });
+      if (data) setAddresses(data);
+      setLoading(false);
+    })();
+  }, [supabase]);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

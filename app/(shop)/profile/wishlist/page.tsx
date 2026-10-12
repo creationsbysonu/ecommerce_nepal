@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/utils/supabase/client';
@@ -26,28 +26,26 @@ export default function WishlistPage() {
   const supabase = createClient();
   const addItem = useCartStore((s) => s.addItem);
 
-  const fetchWishlist = useCallback(async () => {
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('wishlist_items')
-      .select(`
-        id, product_id, created_at,
-        products (
-          id, title, base_price,
-          product_variants ( price, image_url )
-        )
-      `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (data) setItems(data as unknown as WishlistItem[]);
-    setLoading(false);
+  useEffect(() => {
+    // Loader inlined into the effect (setState runs only after awaits resolve).
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('wishlist_items')
+        .select(`
+          id, product_id, created_at,
+          products (
+            id, title, base_price,
+            product_variants ( price, image_url )
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (data) setItems(data as unknown as WishlistItem[]);
+      setLoading(false);
+    })();
   }, [supabase]);
-
-  useEffect(() => { fetchWishlist(); }, [fetchWishlist]);
 
   const removeFromWishlist = async (itemId: string) => {
     await supabase.from('wishlist_items').delete().eq('id', itemId);

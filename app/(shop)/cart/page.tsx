@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -10,14 +10,15 @@ import { Button } from '@/components/ui/Button';
 import styles from './cart.module.css';
 
 export default function CartPage() {
-  const [mounted, setMounted] = useState(false);
+  // Hydration-safe mounted flag: false during SSR, true on the client.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
   const router = useRouter();
   
   const { items, removeItem, updateQuantity, getTotalPrice, getTotalItems } = useCartStore();
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   if (!mounted) return <div style={{padding: '40px', textAlign: 'center'}}>Loading cart...</div>;
 
@@ -37,7 +38,7 @@ export default function CartPage() {
           <div className={styles.emptyCart}>
             <ShoppingCart size={48} color="var(--text-muted)" />
             <h3>Your cart is empty</h3>
-            <p>Looks like you haven't added anything to your cart yet.</p>
+            <p>Looks like you haven&apos;t added anything to your cart yet.</p>
             <Link href="/">
               <Button>Start Shopping</Button>
             </Link>

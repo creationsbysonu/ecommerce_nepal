@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { Bell, Package, Tag, Megaphone, Info, CheckCheck, Trash2 } from 'lucide-react';
 import Link from 'next/link';
@@ -34,23 +34,21 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (data) setNotifications(data as Notification[]);
-    setLoading(false);
+  useEffect(() => {
+    // Loader inlined into the effect (setState runs only after awaits resolve).
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (data) setNotifications(data as Notification[]);
+      setLoading(false);
+    })();
   }, [supabase]);
-
-  useEffect(() => { fetch(); }, [fetch]);
 
   const markAllRead = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -106,7 +104,7 @@ export default function NotificationsPage() {
         <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
           <Bell size={52} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
           <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>No notifications yet</h3>
-          <p>We'll notify you about orders, offers, and important updates.</p>
+          <p>We&apos;ll notify you about orders, offers, and important updates.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

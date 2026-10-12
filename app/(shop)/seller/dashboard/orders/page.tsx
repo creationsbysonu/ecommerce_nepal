@@ -2,8 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { asRows } from '@/utils/supabase/rows';
 import { Package, Truck, CheckCircle, Search } from 'lucide-react';
 import Image from 'next/image';
+
+type SellerOrder = {
+  status: string;
+  shipping_address: {
+    full_name?: string;
+    street_address?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    phone_number?: string;
+  } | null;
+  customer_id: string;
+  profiles?: { full_name: string };
+};
 
 type SellerOrderItem = {
   id: string;
@@ -11,12 +26,7 @@ type SellerOrderItem = {
   quantity: number;
   price_at_time: number;
   created_at: string;
-  orders: {
-    status: string;
-    shipping_address: any;
-    customer_id: string;
-    profiles?: { full_name: string };
-  };
+  orders: SellerOrder;
   product_variants: {
     sku: string;
     image_url: string | null;
@@ -55,24 +65,35 @@ export default function SellerOrders() {
         .order('created_at', { ascending: false });
 
       if (data) {
+        // supabase-js types every embed as an array (it can't see our schema),
+        // but PostgREST returns this many-to-one embed as an object — cast to
+        // the real runtime shape rather than to the inferred one.
+        const rows = asRows<SellerOrderItem>(data);
+
         // Also fetch customer names (profiles) manually since it's cleaner than a 4-deep nested query
-        const customerIds = [...new Set(data.map((i: any) => i.orders?.customer_id).filter(Boolean))];
-        let profilesDict: Record<string, string> = {};
-        
+        const customerIds = [
+          ...new Set(
+            rows
+              .map((i) => i.orders?.customer_id)
+              .filter((id): id is string => typeof id === 'string')
+          ),
+        ];
+        const profilesDict: Record<string, string> = {};
+
         if (customerIds.length > 0) {
-          const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', customerIds as string[]);
+          const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', customerIds);
           profiles?.forEach(p => { profilesDict[p.id] = p.full_name; });
         }
 
-        const formatted = data.map((item: any) => ({
+        const formatted = rows.map((item) => ({
           ...item,
           orders: {
             ...item.orders,
-            profiles: { full_name: profilesDict[item.orders?.customer_id] || 'Unknown Customer' }
+            profiles: { full_name: profilesDict[item.orders?.customer_id ?? ''] || 'Unknown Customer' }
           }
         }));
 
-        setItems(formatted as SellerOrderItem[]);
+        setItems(formatted);
       }
       setLoading(false);
     };
@@ -81,12 +102,16 @@ export default function SellerOrders() {
   }, [supabase]);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    // Note: In a real multi-vendor app, status is per order_item, not per order, 
-    // but our MVP schema has status on the `orders` table. 
+    // Note: In a real multi-vendor app, status is per order_item, not per order,
+    // but our MVP schema has status on the `orders` table.
     // We will update the global order status for now.
-    
-    await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
-    
+
+    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
+    if (error) {
+      alert(`Could not update order status: ${error.message}`);
+      return;
+    }
+
     setItems(items.map(item => 
       item.order_id === orderId 
         ? { ...item, orders: { ...item.orders, status: newStatus } }

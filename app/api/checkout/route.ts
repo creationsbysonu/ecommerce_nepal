@@ -1,6 +1,21 @@
 import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
 
+type CheckoutItem = {
+  productId: string;
+  price: number;
+  quantity: number;
+};
+
+type CheckoutRequest = {
+  items: CheckoutItem[];
+  address: Record<string, unknown>;
+  totalAmount: number;
+  paymentMethod: 'cod' | 'wallet';
+  appliedCoupon: { id: string; discount: number } | null;
+  coinsUsed: { count: number; discount: number } | null;
+};
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -10,7 +25,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { items, address, totalAmount, paymentMethod, appliedCoupon, coinsUsed } = await request.json();
+    const { items, address, totalAmount, paymentMethod, appliedCoupon, coinsUsed } =
+      (await request.json()) as CheckoutRequest;
 
     if (!items || !items.length || !address) {
       return NextResponse.json({ error: 'Invalid checkout data' }, { status: 400 });
@@ -31,13 +47,13 @@ export async function POST(request: Request) {
     if (orderError) throw orderError;
 
     // 2. Create order items
-    const productIds = items.map((i: any) => i.productId);
+    const productIds = items.map((i) => i.productId);
     const { data: variants } = await supabase
       .from('product_variants')
       .select('id, product_id, price')
       .in('product_id', productIds);
 
-    const orderItems = items.map((item: any) => {
+    const orderItems = items.map((item) => {
       const variant = variants?.find(v => v.product_id === item.productId);
       return {
         order_id: order.id,
@@ -45,7 +61,7 @@ export async function POST(request: Request) {
         quantity: item.quantity,
         price_at_time: item.price
       };
-    }).filter((i: any) => i.product_variant_id);
+    }).filter((i) => i.product_variant_id);
 
     if (orderItems.length > 0) {
       const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
@@ -129,8 +145,9 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, orderId: order.id });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Checkout error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
