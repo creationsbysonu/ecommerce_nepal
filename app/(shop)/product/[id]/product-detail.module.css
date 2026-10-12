@@ -1,0 +1,86 @@
+.container {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 40px;
+  padding: 40px 16px;
+  background: white;
+  margin-top: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.imageSection {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+}
+
+.placeholderImage {
+  color: var(--text-muted);
+}
+
+.detailsSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.priceContainer {
+  margin-bottom: 24px;
+}
+
+.price {
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.storeInfo {
+  margin-bottom: 24px;
+  padding: 12px;
+  background: var(--surface-hover);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.description {
+  margin-bottom: 32px;
+}
+
+.description h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.description p {
+  color: #4b5563;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.actions {
+  display: flex;
+  gap: 16px;
+  margin-top: auto;
+}
+
+.addToCartBtn, .buyNowBtn {
+  flex: 1;
+}

@@ -1,0 +1,30 @@
+# Render Blueprint — Mero Pasal
+# Deploys the Next.js app (frontend + API routes) as a Node web service.
+# Database + Auth come from Supabase Cloud (set its URL/keys as env vars below).
+services:
+  - type: web
+    name: mero-pasal
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      # — Supabase Cloud (Dashboard → Project Settings → API) —
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      # — Cloudflare Turnstile (dashboard.cloudflare.com → Turnstile) —
+      - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      # — App —
+      - key: NODE_ENV
+        value: production
+      # Optional: only needed if you run SMTP-based flows from the app itself
+      - key: GMAIL_SMTP_USER
+        sync: false
+      - key: GMAIL_SMTP_PASSWORD
+        sync: false

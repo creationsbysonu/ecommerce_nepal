@@ -1,0 +1,123 @@
+.container {
+  display: flex;
+  gap: 24px;
+  padding: 32px 16px;
+  min-height: calc(100vh - var(--header-height));
+  align-items: flex-start;
+}
+
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
+}
+
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.userInfo {
+  background: white;
+  padding: 16px;
+  border-radius: 4px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.avatar {
+  width: 50px;
+  height: 50px;
+  background-color: var(--brand-yellow-light);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hello {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #212121;
+}
+
+.nav {
+  background: white;
+  border-radius: 4px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.navGroup {
+  border-bottom: 1px solid var(--border);
+}
+
+.navGroup:last-child {
+  border-bottom: none;
+}
+
+.navGroup h3 {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 16px 16px 8px;
+  text-transform: uppercase;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #212121;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.navLink:hover {
+  background: var(--bg-secondary);
+  color: var(--brand-blue);
+}
+
+.mainContent {
+  flex: 1;
+  background: white;
+  border-radius: 4px;
+  box-shadow: var(--shadow-sm);
+  padding: 32px;
+}
+
+.formGroup {
+  margin-bottom: 16px;
+}
+
+.addressCard {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.defaultBadge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: var(--brand-yellow-light);
+  color: var(--brand-yellow-dark);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
