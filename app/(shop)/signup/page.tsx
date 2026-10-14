@@ -8,7 +8,7 @@ import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import TurnstileWidget from '@/components/ui/TurnstileWidget';
-import { Mail, Phone, Lock, User } from 'lucide-react';
+import { Mail, Phone, Lock, User, CheckCircle } from 'lucide-react';
 import styles from '../login/login.module.css';
 
 export default function SignupPage() {
@@ -22,6 +22,7 @@ export default function SignupPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
   const turnstileRef = useRef<TurnstileInstance>(null);
   const router = useRouter();
 
@@ -136,6 +137,7 @@ export default function SignupPage() {
       if (profileError) console.error('Profile update error:', profileError);
 
       // Show success message - user needs to verify email
+      setEmailSent(true);
       setMessage('Account created! Please check your email to verify your address.');
     }
     setIsLoading(false);
@@ -149,104 +151,129 @@ export default function SignupPage() {
           <p>Create your Mero Pasal account</p>
         </div>
 
-        <form onSubmit={handleSignup} className={styles.form}>
-          {error && <div className={styles.errorAlert}>{error}</div>}
-          {message && (
-            <div className={styles.errorAlert} style={{ backgroundColor: '#dcfce7', color: '#166534', borderColor: '#bbf7d0' }}>
-              {message}
+        {emailSent ? (
+          // Email sent confirmation state
+          <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+            <div style={{ width: '80px', height: '80px', background: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+              <CheckCircle size={48} color="#166534" />
             </div>
-          )}
-
-          <Input
-            label="Username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value.toLowerCase())}
-            required
-            placeholder="e.g. ram_sharma"
-            minLength={3}
-            maxLength={30}
-            autoComplete="username"
-          />
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '12px' }}>
-            3-30 characters, letters, numbers, underscores only
-          </p>
-
-          <Input
-            label="Full Name"
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-            placeholder="e.g. Ram Sharma"
-            autoComplete="name"
-          />
-
-          <Input
-            label="Email Address"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value.toLowerCase())}
-            required
-            placeholder="Enter your email"
-            autoComplete="email"
-          />
-
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="Min 8 chars, upper, lower, number, symbol"
-            minLength={8}
-            autoComplete="new-password"
-          />
-
-          <Input
-            label="Confirm Password"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            placeholder="Confirm your password"
-            autoComplete="new-password"
-          />
-
-          {/* Phone number */}
-          <div style={{ marginTop: '4px' }}>
-            <label className={styles.inputLabel}>
-              Mobile Number <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
-            </label>
-            <div className={styles.phoneInputWrapper}>
-              <span className={styles.phonePrefix}>🇳🇵 +977</span>
-              <input
-                className={styles.phoneInput}
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="98XXXXXXXX"
-                maxLength={10}
-                autoComplete="tel"
-              />
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Add your Nepali number for account recovery.
+            <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '12px' }}>Check Your Email</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '8px' }}>
+              We&apos;ve sent a verification link to <strong>{email}</strong>
+            </p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '14px' }}>
+              Click the link in the email to verify your address, then return to log in.
+            </p>
+            <Link href="/login" style={{ display: 'inline-block' }}>
+              <Button fullWidth style={{ background: 'var(--brand-blue)', color: 'white' }}>
+                Go to Login
+              </Button>
+            </Link>
+            <p style={{ marginTop: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>
+              Didn&apos;t receive the email? <Link href="/signup" style={{ color: 'var(--brand-blue)' }}>Try again</Link>
             </p>
           </div>
+        ) : (
+          // Signup form
+          <form onSubmit={handleSignup} className={styles.form}>
+            {error && <div className={styles.errorAlert}>{error}</div>}
+            {message && (
+              <div className={styles.errorAlert} style={{ backgroundColor: '#dcfce7', color: '#166534', borderColor: '#bbf7d0' }}>
+                {message}
+              </div>
+            )}
 
-          {/* Cloudflare Turnstile */}
-          <TurnstileWidget
-            ref={turnstileRef}
-            onSuccess={(token) => setTurnstileToken(token)}
-            onError={() => { resetTurnstile(); setError('Security check failed. Please refresh.'); }}
-            onExpire={() => { resetTurnstile(); setError('Security check expired. Please solve it again.'); }}
-          />
+            <Input
+              label="Username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase())}
+              required
+              placeholder="e.g. ram_sharma"
+              minLength={3}
+              maxLength={30}
+              autoComplete="username"
+            />
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '12px' }}>
+              3-30 characters, letters, numbers, underscores only
+            </p>
 
-          <Button type="submit" fullWidth disabled={isLoading || !turnstileToken}>
-            {isLoading ? 'Creating Account...' : 'Create Account'}
-          </Button>
-        </form>
+            <Input
+              label="Full Name"
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              placeholder="e.g. Ram Sharma"
+              autoComplete="name"
+            />
+
+            <Input
+              label="Email Address"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value.toLowerCase())}
+              required
+              placeholder="Enter your email"
+              autoComplete="email"
+            />
+
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Min 8 chars, upper, lower, number, symbol"
+              minLength={8}
+              autoComplete="new-password"
+            />
+
+            <Input
+              label="Confirm Password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              placeholder="Confirm your password"
+              autoComplete="new-password"
+            />
+
+            {/* Phone number */}
+            <div style={{ marginTop: '4px' }}>
+              <label className={styles.inputLabel}>
+                Mobile Number <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
+              </label>
+              <div className={styles.phoneInputWrapper}>
+                <span className={styles.phonePrefix}>🇳🇵 +977</span>
+                <input
+                  className={styles.phoneInput}
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="98XXXXXXXX"
+                  maxLength={10}
+                  autoComplete="tel"
+                />
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Add your Nepali number for account recovery.
+              </p>
+            </div>
+
+            {/* Cloudflare Turnstile */}
+            <TurnstileWidget
+              ref={turnstileRef}
+              onSuccess={(token) => setTurnstileToken(token)}
+              onError={() => { resetTurnstile(); setError('Security check failed. Please refresh.'); }}
+              onExpire={() => { resetTurnstile(); setError('Security check expired. Please solve it again.'); }}
+            />
+
+            <Button type="submit" fullWidth disabled={isLoading || !turnstileToken}>
+              {isLoading ? 'Creating Account...' : 'Create Account'}
+            </Button>
+          </form>
+        )}
 
         <div className={styles.footer}>
           <span>Already have an account? </span>
