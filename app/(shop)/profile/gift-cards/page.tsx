@@ -53,39 +53,18 @@ export default function GiftCardsPage() {
     setRedeeming(true);
     setRedeemMsg(null);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
     const code = redeemCode.trim().toUpperCase();
-    const { data: card } = await supabase
-      .from('gift_cards')
-      .select('*')
-      .eq('code', code)
-      .eq('is_active', true)
-      .maybeSingle();
 
-    if (!card) {
-      setRedeemMsg({ type: 'error', text: 'Invalid or already used gift card code.' });
-    } else if (card.redeemed_by) {
-      setRedeemMsg({ type: 'error', text: 'This gift card has already been redeemed.' });
-    } else if (card.expires_at && new Date(card.expires_at) < new Date()) {
-      setRedeemMsg({ type: 'error', text: 'This gift card has expired.' });
+    // redeem_gift_card() locks the card row, marks it redeemed, credits the
+    // wallet and writes the ledger entry in one transaction. Doing this from
+    // the browser is no longer possible (and no longer safe): the balances are
+    // guarded by a trigger and gift card updates require the service role.
+    const { data, error } = await supabase.rpc('redeem_gift_card', { p_code: code });
+
+    if (error) {
+      setRedeemMsg({ type: 'error', text: error.message });
     } else {
-      // Mark as redeemed and credit wallet
-      await supabase.from('gift_cards').update({ redeemed_by: user.id }).eq('id', card.id);
-      await supabase.from('wallet_transactions').insert({
-        user_id: user.id,
-        amount: card.value,
-        type: 'credit',
-        description: `Gift card redeemed (${code})`,
-        reference_id: card.id,
-      });
-      // Update wallet balance
-      const { data: profile } = await supabase.from('profiles').select('wallet_balance').eq('id', user.id).single();
-      const newBalance = (Number(profile?.wallet_balance) || 0) + card.value;
-      await supabase.from('profiles').update({ wallet_balance: newBalance }).eq('id', user.id);
-
-      setRedeemMsg({ type: 'success', text: `Rs. ${card.value} added to your wallet!` });
+      setRedeemMsg({ type: 'success', text: `Rs. ${Number(data?.amount ?? 0).toLocaleString()} added to your wallet!` });
       setRedeemCode('');
       loadCards();
     }

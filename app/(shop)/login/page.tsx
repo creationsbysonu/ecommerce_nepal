@@ -1,24 +1,25 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { TurnstileInstance } from '@marsidev/react-turnstile';
 import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import TurnstileWidget from '@/components/ui/TurnstileWidget';
-import { Mail, Phone } from 'lucide-react';
+import { Mail, Phone, Lock, User } from 'lucide-react';
 import styles from './login.module.css';
 
-type LoginMethod = 'email' | 'phone';
+type LoginMethod = 'email' | 'phone' | 'password';
 
-export default function LoginPage() {
-  const [method, setMethod] = useState<LoginMethod>('email');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState(''); // digits only, without +977
-  const [resolvedEmail, setResolvedEmail] = useState(''); // email found via phone lookup
-  const [emailHint, setEmailHint] = useState(''); // masked email shown to user
+function LoginForm() {
+  const [method, setMethod] = useState<LoginMethod>('password');
+  const [identifier, setIdentifier] = useState(''); // email or username
+  const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [resolvedEmail, setResolvedEmail] = useState('');
+  const [emailHint, setEmailHint] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +28,13 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const rawNext = searchParams.get('next');
+  const nextPath =
+    rawNext && rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.includes('\\')
+      ? rawNext
+      : null;
 
   const resetTurnstile = () => {
     setTurnstileToken(null);
@@ -39,10 +47,61 @@ export default function LoginPage() {
     setError(null);
     setMessage(null);
     setOtp('');
+    setPassword('');
+    setIdentifier('');
     resetTurnstile();
   };
 
-  // ── Step 1: Email flow ────────────────────────────────────────────────────
+  // Check if identifier is email or username
+  const isEmail = (str: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+
+  // ── Password Login (email or username) ──────────────────────────────────────
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+
+    if (!identifier || !password) {
+      setError('Please enter both email/username and password.');
+      return;
+    }
+
+    setIsLoading(true);
+    const supabase = createClient();
+
+    let emailToUse = identifier.trim().toLowerCase();
+
+    // If identifier is not an email, look up email by username
+    if (!isEmail(identifier)) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('username', identifier.toLowerCase())
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        setError('Invalid username or password.');
+        setIsLoading(false);
+        return;
+      }
+      emailToUse = profile.email;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: emailToUse,
+      password,
+    });
+
+    if (signInError) {
+      setError('Invalid email/username or password.');
+    } else {
+      router.push(nextPath ?? '/');
+      router.refresh();
+    }
+    setIsLoading(false);
+  };
+
+  // ── Step 1: Email OTP ──────────────────────────────────────────────────────
   const handleEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -54,7 +113,6 @@ export default function LoginPage() {
     }
     setIsLoading(true);
 
-    // Server-side Turnstile verification
     const verifyRes = await fetch('/api/verify-turnstile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -70,7 +128,7 @@ export default function LoginPage() {
 
     const supabase = createClient();
     const { error: signInError } = await supabase.auth.signInWithOtp({
-      email,
+      email: identifier.trim().toLowerCase(),
       options: { shouldCreateUser: false },
     });
 
@@ -79,13 +137,13 @@ export default function LoginPage() {
       resetTurnstile();
     } else {
       setMessage('OTP sent! Check your email for the 6-digit code.');
-      setResolvedEmail(email);
+      setResolvedEmail(identifier.trim().toLowerCase());
       setStep(2);
     }
     setIsLoading(false);
   };
 
-  // ── Step 1: Phone flow ────────────────────────────────────────────────────
+  // ── Step 1: Phone OTP ──────────────────────────────────────────────────────
   const handlePhoneOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -97,7 +155,6 @@ export default function LoginPage() {
     }
     setIsLoading(true);
 
-    // Server-side Turnstile verification
     const verifyRes = await fetch('/api/verify-turnstile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -111,7 +168,6 @@ export default function LoginPage() {
       return;
     }
 
-    // Phone → email lookup
     const phoneRes = await fetch('/api/auth/phone-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -131,7 +187,6 @@ export default function LoginPage() {
       return;
     }
 
-    // Send OTP to the resolved email
     const supabase = createClient();
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email: phoneData.email,
@@ -150,7 +205,7 @@ export default function LoginPage() {
     setIsLoading(false);
   };
 
-  // ── Step 2: OTP verification (shared) ─────────────────────────────────────
+  // ── Step 2: OTP Verification ───────────────────────────────────────────────
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -169,7 +224,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push('/');
+    router.push(nextPath ?? '/');
     router.refresh();
   };
 
@@ -195,11 +250,19 @@ export default function LoginPage() {
           <div className={styles.tabs}>
             <button
               type="button"
+              className={`${styles.tab} ${method === 'password' ? styles.tabActive : ''}`}
+              onClick={() => switchMethod('password')}
+            >
+              <Lock size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+              Password
+            </button>
+            <button
+              type="button"
               className={`${styles.tab} ${method === 'email' ? styles.tabActive : ''}`}
               onClick={() => switchMethod('email')}
             >
               <Mail size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-              Email
+              Email OTP
             </button>
             <button
               type="button"
@@ -212,17 +275,51 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* ── Step 1: Email ── */}
+        {/* ── Step 1: Password (Email/Username) ── */}
+        {step === 1 && method === 'password' && (
+          <form onSubmit={handlePasswordLogin} className={styles.form}>
+            {error && <div className={styles.errorAlert}>{error}</div>}
+            <Input
+              label="Email or Username"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              required
+              placeholder="Enter your email or username"
+              autoComplete="username"
+            />
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              placeholder="Enter your password"
+              autoComplete="current-password"
+            />
+            <Button type="submit" fullWidth disabled={isLoading || !identifier || !password}>
+              {isLoading ? 'Signing in...' : 'Sign In'}
+            </Button>
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <Link href="/forgot-password" className={styles.link} style={{ fontSize: '13px' }}>
+                Forgot password?
+              </Link>
+            </div>
+          </form>
+        )}
+
+        {/* ── Step 1: Email OTP ── */}
         {step === 1 && method === 'email' && (
           <form onSubmit={handleEmailOtp} className={styles.form}>
             {error && <div className={styles.errorAlert}>{error}</div>}
             <Input
               label="Email Address"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               required
               placeholder="Enter your registered email"
+              autoComplete="email"
             />
             <TurnstileWidget
               ref={turnstileRef}
@@ -236,7 +333,7 @@ export default function LoginPage() {
           </form>
         )}
 
-        {/* ── Step 1: Phone ── */}
+        {/* ── Step 1: Phone OTP ── */}
         {step === 1 && method === 'phone' && (
           <form onSubmit={handlePhoneOtp} className={styles.form}>
             {error && <div className={styles.errorAlert}>{error}</div>}
@@ -254,6 +351,7 @@ export default function LoginPage() {
                 maxLength={10}
                 pattern="^(97|98)\d{8}$"
                 title="Enter a valid Nepali mobile number starting with 97 or 98"
+                autoComplete="tel"
               />
             </div>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px', marginBottom: '16px' }}>
@@ -299,11 +397,7 @@ export default function LoginPage() {
               {isLoading ? 'Verifying...' : 'Verify & Login'}
             </Button>
             <div style={{ textAlign: 'center', marginTop: '16px' }}>
-              <button
-                type="button"
-                onClick={goBack}
-                style={{ background: 'none', border: 'none', color: 'var(--brand-blue)', cursor: 'pointer', fontWeight: 500 }}
-              >
+              <button type="button" onClick={goBack} style={{ background: 'none', border: 'none', color: 'var(--brand-blue)', cursor: 'pointer', fontWeight: 500 }}>
                 ← Back
               </button>
             </div>
@@ -316,5 +410,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

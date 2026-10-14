@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/utils/supabase/client';
 import { BellRing, Mail, Smartphone, Bell, CheckCircle } from 'lucide-react';
 
 interface ToggleSwitchProps {
@@ -10,6 +11,18 @@ interface ToggleSwitchProps {
   onChange: () => void;
 }
 
+// Mirrors the default of profiles.notification_preferences.
+const DEFAULT_PREFS = {
+  email_orders: true,
+  email_promos: false,
+  sms_orders: true,
+  sms_promos: true,
+  push_orders: true,
+  push_promos: false,
+};
+
+type Prefs = typeof DEFAULT_PREFS;
+
 function ToggleSwitch({ label, desc, checked, onChange }: ToggleSwitchProps) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid var(--border)' }}>
@@ -17,7 +30,7 @@ function ToggleSwitch({ label, desc, checked, onChange }: ToggleSwitchProps) {
         <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#212121' }}>{label}</h4>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{desc}</p>
       </div>
-      <button 
+      <button
         onClick={onChange}
         style={{ width: '44px', height: '24px', background: checked ? 'var(--brand-blue)' : '#cbd5e1', borderRadius: '12px', position: 'relative', cursor: 'pointer', border: 'none', transition: 'background 0.2s' }}
       >
@@ -28,24 +41,60 @@ function ToggleSwitch({ label, desc, checked, onChange }: ToggleSwitchProps) {
 }
 
 export default function PreferencesPage() {
-  const [prefs, setPrefs] = useState({
-    email_orders: true,
-    email_promos: false,
-    sms_orders: true,
-    sms_promos: true,
-    push_orders: true,
-    push_promos: false,
-  });
-  
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+  const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const supabase = createClient();
 
-  const toggle = (key: keyof typeof prefs) => {
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoaded(true);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('notification_preferences')
+        .eq('id', user.id)
+        .single();
+
+      if (data?.notification_preferences) {
+        const stored = data.notification_preferences as Partial<Prefs>;
+        setPrefs((p) => ({ ...p, ...stored }));
+      }
+      setLoaded(true);
+    })();
+  }, [supabase]);
+
+  const toggle = (key: keyof Prefs) => {
     setPrefs(p => ({ ...p, [key]: !p[key] }));
     setSaved(false);
   };
 
-  const handleSave = () => {
-    // In a real app, save to Supabase profiles table
+  const handleSave = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setErrorMsg('Please sign in to save your preferences.');
+      return;
+    }
+
+    setSaving(true);
+    setErrorMsg(null);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ notification_preferences: prefs })
+      .eq('id', user.id);
+    setSaving(false);
+
+    if (error) {
+      setErrorMsg('Could not save your preferences. Please try again.');
+      return;
+    }
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -82,11 +131,13 @@ export default function PreferencesPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '32px' }}>
           <button 
             onClick={handleSave}
+            disabled={saving || !loaded}
             style={{ background: 'var(--brand-yellow)', color: '#212121', padding: '12px 24px', borderRadius: '8px', fontWeight: 700, fontSize: '15px', border: 'none', cursor: 'pointer' }}
           >
-            Save Preferences
+            {saving ? 'Saving...' : 'Save Preferences'}
           </button>
           {saved && <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', fontWeight: 600, fontSize: '14px' }}><CheckCircle size={18} /> Saved!</span>}
+          {errorMsg && <span style={{ color: 'var(--error)', fontSize: '14px', fontWeight: 600 }}>{errorMsg}</span>}
         </div>
       </div>
     </div>

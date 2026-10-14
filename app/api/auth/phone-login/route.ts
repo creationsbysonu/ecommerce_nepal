@@ -8,7 +8,9 @@ import { createClient } from '@/utils/supabase/server';
  * Flow:
  * 1. Validate the number is a Nepali mobile number (10 digits, starts with 97/98)
  * 2. Build full number: "+977" + digits
- * 3. Look up profiles table for matching phone_number
+ * 3. Resolve it to the account's e-mail via the phone_login_lookup RPC
+ *    (profiles is private under RLS, so the old anonymous REST read of it
+ *    returns nothing)
  * 4. Return masked email to client (e.g. "s***@gmail.com")
  * 5. Client then calls supabase.auth.signInWithOtp({ email }) directly
  *
@@ -50,13 +52,12 @@ export async function POST(request: NextRequest) {
 
     const fullPhone = `+977${digits}`;
 
-    // Query profiles for matching phone_number
+    // Resolve phone → e-mail through the dedicated RPC (see
+    // phone_login_lookup in the migrations): profiles no longer permits
+    // anonymous reads, and it never should expose e-mails that way anyway.
     const supabase = await createClient();
-    const { data: profile, error: dbError } = await supabase
-      .from('profiles')
-      .select('email')
-      .eq('phone_number', fullPhone)
-      .maybeSingle();
+    const { data: email, error: dbError } = await supabase
+      .rpc('phone_login_lookup', { p_phone: fullPhone });
 
     if (dbError) {
       console.error('Phone login DB error:', dbError);
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!profile || !profile.email) {
+    if (!email) {
       return NextResponse.json(
         {
           success: false,
@@ -82,8 +83,8 @@ export async function POST(request: NextRequest) {
     // over HTTPS and the OTP still guards access.
     return NextResponse.json({
       success: true,
-      email: profile.email,
-      emailHint: maskEmail(profile.email),
+      email,
+      emailHint: maskEmail(email),
     });
   } catch (err) {
     console.error('Phone login error:', err);

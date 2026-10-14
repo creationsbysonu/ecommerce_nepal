@@ -3,17 +3,30 @@ import { NextResponse } from 'next/server';
 
 type CheckoutItem = {
   productId: string;
-  price: number;
   quantity: number;
 };
 
 type CheckoutRequest = {
   items: CheckoutItem[];
-  address: Record<string, unknown>;
-  totalAmount: number;
+  addressId: string;
   paymentMethod: 'cod' | 'wallet';
-  appliedCoupon: { id: string; discount: number } | null;
-  coinsUsed: { count: number; discount: number } | null;
+  clientReference: string;
+  couponCode?: string | null;
+  coinsUsed?: number;
+};
+
+/** Shape returned by the place_order() RPC (supabase/migrations/…_place_order_and_friends.sql). */
+type PlaceOrderResult = {
+  orderId: string;
+  status: string;
+  total: number;
+  subtotal: number;
+  deliveryCharge: number;
+  couponDiscount: number;
+  coinDiscount: number;
+  coinsUsed: number;
+  coinsEarned: number;
+  duplicate: boolean;
 };
 
 export async function POST(request: Request) {
@@ -25,126 +38,41 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { items, address, totalAmount, paymentMethod, appliedCoupon, coinsUsed } =
-      (await request.json()) as CheckoutRequest;
+    const body = (await request.json()) as CheckoutRequest;
+    const { items, addressId, paymentMethod, clientReference, couponCode, coinsUsed } = body;
 
-    if (!items || !items.length || !address) {
+    if (!items || !items.length || !addressId || !paymentMethod || !clientReference) {
       return NextResponse.json({ error: 'Invalid checkout data' }, { status: 400 });
     }
 
-    // 1. Create the order
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        customer_id: user.id,
-        total_amount: totalAmount,
-        shipping_address: address,
-        status: paymentMethod === 'wallet' ? 'processing' : 'pending' 
-      })
-      .select()
-      .single();
-
-    if (orderError) throw orderError;
-
-    // 2. Create order items
-    const productIds = items.map((i) => i.productId);
-    const { data: variants } = await supabase
-      .from('product_variants')
-      .select('id, product_id, price')
-      .in('product_id', productIds);
-
-    const orderItems = items.map((item) => {
-      const variant = variants?.find(v => v.product_id === item.productId);
-      return {
-        order_id: order.id,
-        product_variant_id: variant?.id,
+    // The whole checkout runs inside place_order() as a single Postgres
+    // transaction: prices come from product_variants (never from the request),
+    // stock is decremented under a row lock, the coupon and coin rules are
+    // re-checked server-side, the wallet is settled, loyalty coins are credited
+    // and the confirmation notification is written — all or nothing.
+    //
+    // clientReference makes a retried / double-clicked submit idempotent: the
+    // same reference returns the order created the first time.
+    const { data, error } = await supabase.rpc('place_order', {
+      p_items: items.map((item) => ({
+        product_id: item.productId,
+        variant_id: null,
         quantity: item.quantity,
-        price_at_time: item.price
-      };
-    }).filter((i) => i.product_variant_id);
-
-    if (orderItems.length > 0) {
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-      if (itemsError) throw itemsError;
-    }
-
-    // 3. Process Wallet Payment
-    if (paymentMethod === 'wallet' && totalAmount > 0) {
-      const { data: profile } = await supabase.from('profiles').select('wallet_balance').eq('id', user.id).single();
-      const currentBalance = Number(profile?.wallet_balance) || 0;
-      
-      if (currentBalance < totalAmount) {
-        throw new Error('Insufficient wallet balance');
-      }
-
-      await supabase.from('wallet_transactions').insert({
-        user_id: user.id,
-        amount: -totalAmount,
-        type: 'debit',
-        description: `Payment for Order #${order.id.slice(0, 8)}`,
-        reference_id: order.id
-      });
-
-      await supabase.from('profiles').update({ wallet_balance: currentBalance - totalAmount }).eq('id', user.id);
-    }
-
-    // 4. Process Coupon Usage
-    if (appliedCoupon) {
-      await supabase.from('coupon_usages').insert({
-        coupon_id: appliedCoupon.id,
-        user_id: user.id,
-        order_id: order.id,
-        discount_applied: appliedCoupon.discount
-      });
-
-      // Increment used_count (this requires an RPC or selecting and updating; for simplicity we select and update)
-      const { data: couponData } = await supabase.from('coupons').select('used_count').eq('id', appliedCoupon.id).single();
-      if (couponData) {
-        await supabase.from('coupons').update({ used_count: (couponData.used_count || 0) + 1 }).eq('id', appliedCoupon.id);
-      }
-    }
-
-    // 5. Process Coins Used
-    if (coinsUsed && coinsUsed.count > 0) {
-      const { data: profile } = await supabase.from('profiles').select('coin_balance').eq('id', user.id).single();
-      const currentCoins = profile?.coin_balance || 0;
-
-      await supabase.from('coin_transactions').insert({
-        user_id: user.id,
-        coins: -coinsUsed.count,
-        type: 'redeemed',
-        reason: `Redeemed on Order #${order.id.slice(0, 8)}`,
-        order_id: order.id
-      });
-
-      await supabase.from('profiles').update({ coin_balance: currentCoins - coinsUsed.count }).eq('id', user.id);
-    }
-
-    // 6. Earn new coins (1 coin per Rs. 100 spent)
-    const coinsEarned = Math.floor(totalAmount / 100);
-    if (coinsEarned > 0) {
-      await supabase.from('coin_transactions').insert({
-        user_id: user.id,
-        coins: coinsEarned,
-        type: 'earned',
-        reason: `Earned from Order #${order.id.slice(0, 8)}`,
-        order_id: order.id
-      });
-
-      const { data: profile } = await supabase.from('profiles').select('coin_balance').eq('id', user.id).single();
-      await supabase.from('profiles').update({ coin_balance: (profile?.coin_balance || 0) + coinsEarned }).eq('id', user.id);
-    }
-
-    // 7. Create Notification
-    await supabase.from('notifications').insert({
-      user_id: user.id,
-      title: 'Order Placed Successfully',
-      message: `Your order #${order.id.slice(0, 8)} has been placed and is being processed.`,
-      type: 'order',
-      link: '/profile/orders'
+      })),
+      p_address_id: addressId,
+      p_payment_method: paymentMethod,
+      p_client_reference: clientReference,
+      p_coupon_code: couponCode ?? null,
+      p_coins_used: coinsUsed ?? 0,
     });
 
-    return NextResponse.json({ success: true, orderId: order.id });
+    if (error) {
+      // place_order() raises user-facing messages (out of stock, insufficient
+      // wallet balance, coupon no longer valid, …) — pass them through.
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, ...(data as PlaceOrderResult) });
   } catch (error) {
     console.error('Checkout error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';

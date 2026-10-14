@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { useCartStore } from '@/store/useCartStore';
@@ -49,6 +49,11 @@ export default function CheckoutPage() {
   // Payment Options
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'wallet'>('cod');
   const [useCoins, setUseCoins] = useState(false);
+
+  // One idempotency key per checkout session: a retried or double-clicked
+  // submit reuses it, so place_order() returns the original order rather than
+  // debiting the wallet or the stock twice.
+  const clientReference = useRef(crypto.randomUUID());
 
   // Coupon State
   const [couponCode, setCouponCode] = useState('');
@@ -196,19 +201,21 @@ export default function CheckoutPage() {
     }
 
     setPlacingOrder(true);
-    const selectedAddress = addresses.find(a => a.id === selectedAddressId);
 
     try {
+      // Only the identity of the cart lines is sent — never prices or totals:
+      // place_order() recomputes everything from the database (subtotal,
+      // delivery, coupon, coins) and returns the authoritative breakdown.
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items,
-          address: selectedAddress,
-          totalAmount: amountPayable,
+          items: items.map(i => ({ productId: i.productId, quantity: i.quantity })),
+          addressId: selectedAddressId,
           paymentMethod,
-          appliedCoupon: appliedCoupon ? { id: appliedCoupon.id, discount: couponDiscount } : null,
-          coinsUsed: useCoins ? { count: coinsToDeduct, discount: coinDiscount } : null,
+          clientReference: clientReference.current,
+          couponCode: appliedCoupon?.code ?? null,
+          coinsUsed: useCoins ? coinsToDeduct : 0,
         })
       });
 

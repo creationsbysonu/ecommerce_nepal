@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/utils/supabase/client';
 import { HeadphonesIcon, MessageCircle, Mail, Phone, Clock, ChevronDown, CheckCircle } from 'lucide-react';
+import Link from 'next/link';
 
 const faqs = [
   { q: "How do I track my order?", a: "You can track your order by going to the 'Orders' section in your profile dropdown. Click on any order to see its current status." },
@@ -13,11 +15,63 @@ const faqs = [
 export default function SupportPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [msgSent, setMsgSent] = useState(false);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [subject, setSubject] = useState('');
+  const [orderRef, setOrderRef] = useState('');
+  const [message, setMessage] = useState('');
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setSignedIn(!!user);
+    })();
+  }, [supabase]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setErrorMsg('Please sign in to submit a support ticket.');
+      return;
+    }
+
+    setSubmitting(true);
+
+    // Tickets are stored in support_tickets and visible to the customer (and
+    // support staff) under RLS. Only send an order_id when the customer typed a
+    // full UUID — the RLS policy requires the order to belong to them, so a
+    // partial or wrong id would just be rejected.
+    const orderId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderRef.trim())
+      ? orderRef.trim()
+      : null;
+    const extra = orderRef.trim() && !orderId ? `\n\n(Order reference: ${orderRef.trim()})` : '';
+
+    const { error } = await supabase.from('support_tickets').insert({
+      user_id: user.id,
+      subject,
+      order_id: orderId,
+      message: message.trim() + extra,
+    });
+
+    setSubmitting(false);
+
+    if (error) {
+      setErrorMsg(error.message || 'Could not submit your ticket. Please try again.');
+      return;
+    }
+
+    setSubject('');
+    setOrderRef('');
+    setMessage('');
     setMsgSent(true);
-    setTimeout(() => setMsgSent(false), 3000);
+    setTimeout(() => setMsgSent(false), 5000);
   };
 
   return (
@@ -59,11 +113,20 @@ export default function SupportPage() {
               <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Message Sent!</h3>
               <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>We&apos;ll get back to you shortly.</p>
             </div>
+          ) : signedIn === false ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <MessageCircle size={48} color="var(--text-muted)" style={{ margin: '0 auto 16px' }} />
+              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Sign in needed</h3>
+              <p style={{ color: 'var(--text-muted)', margin: '8px 0 20px' }}>Please sign in so we can attach your ticket to your account and reply to you.</p>
+              <Link href="/login?next=/support" style={{ background: 'var(--brand-yellow)', color: '#212121', padding: '12px 24px', borderRadius: '6px', fontWeight: 700, fontSize: '15px', textDecoration: 'none' }}>
+                Sign In
+              </Link>
+            </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>Subject</label>
-                <select style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'white' }} required>
+                <select value={subject} onChange={(e) => setSubject(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'white' }} required>
                   <option value="">Select a topic</option>
                   <option value="order">Order tracking/issues</option>
                   <option value="return">Returns/Refunds</option>
@@ -73,14 +136,15 @@ export default function SupportPage() {
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>Order ID (Optional)</label>
-                <input type="text" placeholder="e.g. 9b1deb4d..." style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '6px' }} />
+                <input type="text" value={orderRef} onChange={(e) => setOrderRef(e.target.value)} placeholder="e.g. 9b1deb4d..." style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '6px' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>Message</label>
-                <textarea rows={4} placeholder="How can we help?" style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '6px', resize: 'vertical' }} required></textarea>
+                <textarea rows={4} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="How can we help?" style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: '6px', resize: 'vertical' }} required></textarea>
               </div>
-              <button type="submit" style={{ background: 'var(--brand-yellow)', color: '#212121', padding: '12px', borderRadius: '6px', fontWeight: 700, fontSize: '15px' }}>
-                Submit Ticket
+              {errorMsg && <p style={{ color: 'var(--error)', fontSize: '13px' }}>{errorMsg}</p>}
+              <button type="submit" disabled={submitting || !subject || !message.trim()} style={{ background: 'var(--brand-yellow)', color: '#212121', padding: '12px', borderRadius: '6px', fontWeight: 700, fontSize: '15px' }}>
+                {submitting ? 'Submitting...' : 'Submit Ticket'}
               </button>
             </form>
           )}

@@ -70,7 +70,10 @@ export default function SellerOrders() {
         // the real runtime shape rather than to the inferred one.
         const rows = asRows<SellerOrderItem>(data);
 
-        // Also fetch customer names (profiles) manually since it's cleaner than a 4-deep nested query
+        // Customer names via profile_display_names(): profiles is no longer
+        // world-readable (it exposes email, phone and balances), so this
+        // SECURITY DEFINER function is the supported way to resolve a name
+        // for someone else's account.
         const customerIds = [
           ...new Set(
             rows
@@ -81,8 +84,12 @@ export default function SellerOrders() {
         const profilesDict: Record<string, string> = {};
 
         if (customerIds.length > 0) {
-          const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', customerIds);
-          profiles?.forEach(p => { profilesDict[p.id] = p.full_name; });
+          const { data: names } = await supabase.rpc('profile_display_names', {
+            p_ids: customerIds,
+          });
+          names?.forEach((n: { id: string; full_name: string | null }) => {
+            profilesDict[n.id] = n.full_name || 'Unknown Customer';
+          });
         }
 
         const formatted = rows.map((item) => ({

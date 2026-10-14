@@ -1,10 +1,58 @@
 'use client';
 
-import { TrendingUp, Users, Target, BarChart, ArrowRight } from 'lucide-react';
-import Image from 'next/image';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/utils/supabase/client';
+import { Users, Target, BarChart, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdvertisePage() {
+  const [brandName, setBrandName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const supabase = createClient();
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setSignedIn(!!user);
+      if (user?.email) setEmail(user.email);
+    })();
+  }, [supabase]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResult(null);
+
+    // The RLS policy only lets signed-in advertisers file a request for
+    // themselves, so check first rather than letting the insert fail.
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setResult({ type: 'error', text: 'Please sign in before requesting a callback.' });
+      return;
+    }
+
+    setSubmitting(true);
+    const { error } = await supabase.from('advertise_requests').insert({
+      user_id: user.id,
+      brand_name: brandName.trim(),
+      phone_number: phoneNumber.trim(),
+      email: email.trim(),
+    });
+    setSubmitting(false);
+
+    if (error) {
+      setResult({ type: 'error', text: error.message || 'Could not submit your request.' });
+      return;
+    }
+
+    setBrandName('');
+    setPhoneNumber('');
+    setResult({ type: 'success', text: "Request submitted! We'll call you soon." });
+  };
+
   return (
     <div style={{ background: 'white' }}>
       {/* Hero Section */}
@@ -52,14 +100,26 @@ export default function AdvertisePage() {
           <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '8px', textAlign: 'center' }}>Request a callback</h2>
           <p style={{ color: 'var(--text-muted)', marginBottom: '24px', textAlign: 'center' }}>Leave your details and our ad experts will get in touch with you.</p>
           
-          <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} onSubmit={(e) => { e.preventDefault(); alert("Request submitted! We'll call you soon."); }}>
-            <input type="text" placeholder="Your Name / Brand Name" style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '15px' }} required />
-            <input type="tel" placeholder="Phone Number" style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '15px' }} required />
-            <input type="email" placeholder="Email Address" style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '15px' }} required />
-            <button type="submit" style={{ background: 'var(--brand-blue)', color: 'white', padding: '14px', borderRadius: '8px', fontSize: '16px', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
-              Submit Request
+          {result && (
+            <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px', color: result.type === 'success' ? '#166534' : 'var(--error)' }}>
+              {result.text}
+            </p>
+          )}
+
+          <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} onSubmit={handleSubmit}>
+            <input type="text" placeholder="Your Name / Brand Name" value={brandName} onChange={(e) => setBrandName(e.target.value)} style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '15px' }} required />
+            <input type="tel" placeholder="Phone Number" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '15px' }} required />
+            <input type="email" placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '15px' }} required />
+            <button type="submit" disabled={submitting} style={{ background: 'var(--brand-blue)', color: 'white', padding: '14px', borderRadius: '8px', fontSize: '16px', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
+              {submitting ? 'Submitting...' : 'Submit Request'}
             </button>
           </form>
+
+          {signedIn === false && (
+            <p style={{ marginTop: '16px', fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center' }}>
+              <Link href="/login?next=/advertise" style={{ color: 'var(--brand-blue)', fontWeight: 600 }}>Sign in</Link> so our team can pick up your request.
+            </p>
+          )}
         </div>
       </div>
     </div>

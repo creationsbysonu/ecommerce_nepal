@@ -8,14 +8,16 @@ import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import TurnstileWidget from '@/components/ui/TurnstileWidget';
+import { Mail, Phone, Lock, User } from 'lucide-react';
 import styles from '../login/login.module.css';
 
 export default function SignupPage() {
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState(''); // digits only, without +977
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<1 | 2>(1);
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,32 +30,50 @@ export default function SignupPage() {
     turnstileRef.current?.reset();
   };
 
-  const handleRequestOtp = async (e: React.FormEvent) => {
+  const validateUsername = (uname: string): string | null => {
+    if (uname.length < 3) return 'Username must be at least 3 characters.';
+    if (uname.length > 30) return 'Username must be at most 30 characters.';
+    if (!/^[a-zA-Z0-9_]+$/.test(uname)) return 'Username can only contain letters, numbers, and underscores.';
+    return null;
+  };
+
+  const validatePassword = (pwd: string): string | null => {
+    if (pwd.length < 8) return 'Password must be at least 8 characters.';
+    if (!/[A-Z]/.test(pwd)) return 'Password must contain at least one uppercase letter.';
+    if (!/[a-z]/.test(pwd)) return 'Password must contain at least one lowercase letter.';
+    if (!/[0-9]/.test(pwd)) return 'Password must contain at least one number.';
+    if (!/[^A-Za-z0-9]/.test(pwd)) return 'Password must contain at least one special character.';
+    return null;
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setMessage(null);
 
-    if (!turnstileToken) {
-      setError('Please complete the security check before continuing.');
-      return;
-    }
+    const usernameError = validateUsername(username);
+    if (usernameError) { setError(usernameError); return; }
 
-    // Validate phone if provided
-    if (phone && !/^(97|98)\d{8}$/.test(phone)) {
-      setError('Please enter a valid Nepali mobile number (10 digits, starts with 97 or 98).');
-      return;
-    }
+    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+
+    const pwdError = validatePassword(password);
+    if (pwdError) { setError(pwdError); return; }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Please enter a valid email address.'); return; }
+
+    if (phone && !/^(97|98)\d{8}$/.test(phone)) { setError('Please enter a valid Nepali mobile number (10 digits, starts with 97 or 98).'); return; }
+
+    if (!turnstileToken) { setError('Please complete the security check before continuing.'); return; }
 
     setIsLoading(true);
 
-    // Server-side Turnstile verification
+    // Verify Turnstile
     const verifyRes = await fetch('/api/verify-turnstile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: turnstileToken }),
     });
     const verifyData = await verifyRes.json() as { success: boolean; error?: string };
-
     if (!verifyData.success) {
       setError(verifyData.error ?? 'Security check failed. Please try again.');
       resetTurnstile();
@@ -62,63 +82,63 @@ export default function SignupPage() {
     }
 
     const supabase = createClient();
-    const { error: signUpError } = await supabase.auth.signInWithOtp({
-      email,
+
+    // Check username availability
+    const { data: existingUser } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', username.toLowerCase())
+      .maybeSingle();
+    if (existingUser) { setError('Username is already taken.'); resetTurnstile(); setIsLoading(false); return; }
+
+    // Check email availability
+    const { data: existingEmail } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+    if (existingEmail) { setError('An account with this email already exists.'); resetTurnstile(); setIsLoading(false); return; }
+
+    // Sign up with email/password - Supabase will send verification email
+    const { error: signUpError, data } = await supabase.auth.signUp({
+      email: email.toLowerCase(),
+      password,
       options: {
-        shouldCreateUser: true,
         data: {
           full_name: fullName,
-          // phone stored in metadata — the profile trigger will capture email,
-          // we save phone separately after OTP verification
+          username: username.toLowerCase(),
         },
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/email-verified`,
       },
     });
 
     if (signUpError) {
       setError(signUpError.message);
       resetTurnstile();
-    } else {
-      setMessage('OTP sent! Please check your email for the 6-digit verification code.');
-      setStep(2);
-    }
-    setIsLoading(false);
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-
-    const supabase = createClient();
-    const { error: verifyError, data } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: 'email',
-    });
-
-    if (verifyError) {
-      setError(verifyError.message);
       setIsLoading(false);
       return;
     }
 
-    // After OTP verified, save phone + email to profile
     if (data.user) {
+      // Save profile with username
       const updates: Record<string, string> = {
-        email,           // capture email in profiles table
+        username: username.toLowerCase(),
+        email: email.toLowerCase(),
         full_name: fullName,
       };
-      if (phone) {
-        updates.phone_number = `+977${phone}`;
-      }
-      await supabase
+      if (phone) updates.phone_number = `+977${phone}`;
+
+      const { error: profileError } = await supabase
         .from('profiles')
         .update(updates)
         .eq('id', data.user.id);
-    }
 
-    router.push('/');
-    router.refresh();
+      if (profileError) console.error('Profile update error:', profileError);
+
+      // Show success message - user needs to verify email
+      setMessage('Account created! Please check your email to verify your address.');
+    }
+    setIsLoading(false);
   };
 
   return (
@@ -126,98 +146,107 @@ export default function SignupPage() {
       <div className={styles.loginBox}>
         <div className={styles.header}>
           <h2>Sign Up</h2>
-          <p>Join Mero Pasal to unlock all features</p>
+          <p>Create your Mero Pasal account</p>
         </div>
 
-        {step === 1 ? (
-          <form onSubmit={handleRequestOtp} className={styles.form}>
-            {error && <div className={styles.errorAlert}>{error}</div>}
-
-            <Input
-              label="Full Name"
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-              placeholder="e.g. Ram Sharma"
-            />
-
-            <Input
-              label="Email Address"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="Enter your email"
-            />
-
-            {/* Phone number — required for phone-based login later */}
-            <div style={{ marginTop: '4px' }}>
-              <label className={styles.inputLabel}>
-                Mobile Number <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional — needed for phone login)</span>
-              </label>
-              <div className={styles.phoneInputWrapper}>
-                <span className={styles.phonePrefix}>🇳🇵 +977</span>
-                <input
-                  className={styles.phoneInput}
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  placeholder="98XXXXXXXX"
-                  maxLength={10}
-                />
-              </div>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Add your Nepali number to enable phone-based login.
-              </p>
+        <form onSubmit={handleSignup} className={styles.form}>
+          {error && <div className={styles.errorAlert}>{error}</div>}
+          {message && (
+            <div className={styles.errorAlert} style={{ backgroundColor: '#dcfce7', color: '#166534', borderColor: '#bbf7d0' }}>
+              {message}
             </div>
+          )}
 
-            {/* Cloudflare Turnstile */}
-            <TurnstileWidget
-              ref={turnstileRef}
-              onSuccess={(token) => setTurnstileToken(token)}
-              onError={() => { resetTurnstile(); setError('Security check failed. Please refresh.'); }}
-              onExpire={() => { resetTurnstile(); setError('Security check expired. Please solve it again.'); }}
-            />
+          <Input
+            label="Username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value.toLowerCase())}
+            required
+            placeholder="e.g. ram_sharma"
+            minLength={3}
+            maxLength={30}
+            autoComplete="username"
+          />
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '-12px', marginBottom: '12px' }}>
+            3-30 characters, letters, numbers, underscores only
+          </p>
 
-            <Button type="submit" fullWidth disabled={isLoading || !turnstileToken}>
-              {isLoading ? 'Sending OTP...' : 'Continue'}
-            </Button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOtp} className={styles.form}>
-            {error && <div className={styles.errorAlert}>{error}</div>}
-            {message && (
-              <div className={styles.errorAlert} style={{ backgroundColor: '#dcfce7', color: '#166534', borderColor: '#bbf7d0' }}>
-                {message}
-              </div>
-            )}
+          <Input
+            label="Full Name"
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+            placeholder="e.g. Ram Sharma"
+            autoComplete="name"
+          />
 
-            <Input
-              label="6-Digit OTP"
-              type="text"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              required
-              placeholder="Enter OTP"
-              maxLength={6}
-            />
+          <Input
+            label="Email Address"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value.toLowerCase())}
+            required
+            placeholder="Enter your email"
+            autoComplete="email"
+          />
 
-            <Button type="submit" fullWidth disabled={isLoading || otp.length < 6}>
-              {isLoading ? 'Verifying...' : 'Verify & Create Account'}
-            </Button>
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            placeholder="Min 8 chars, upper, lower, number, symbol"
+            minLength={8}
+            autoComplete="new-password"
+          />
 
-            <div style={{ textAlign: 'center', marginTop: '16px' }}>
-              <button
-                type="button"
-                onClick={() => { setStep(1); resetTurnstile(); }}
-                style={{ background: 'none', border: 'none', color: 'var(--brand-blue)', cursor: 'pointer', fontWeight: 500 }}
-              >
-                ← Back to details
-              </button>
+          <Input
+            label="Confirm Password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            placeholder="Confirm your password"
+            autoComplete="new-password"
+          />
+
+          {/* Phone number */}
+          <div style={{ marginTop: '4px' }}>
+            <label className={styles.inputLabel}>
+              Mobile Number <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
+            </label>
+            <div className={styles.phoneInputWrapper}>
+              <span className={styles.phonePrefix}>🇳🇵 +977</span>
+              <input
+                className={styles.phoneInput}
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="98XXXXXXXX"
+                maxLength={10}
+                autoComplete="tel"
+              />
             </div>
-          </form>
-        )}
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Add your Nepali number for account recovery.
+            </p>
+          </div>
+
+          {/* Cloudflare Turnstile */}
+          <TurnstileWidget
+            ref={turnstileRef}
+            onSuccess={(token) => setTurnstileToken(token)}
+            onError={() => { resetTurnstile(); setError('Security check failed. Please refresh.'); }}
+            onExpire={() => { resetTurnstile(); setError('Security check expired. Please solve it again.'); }}
+          />
+
+          <Button type="submit" fullWidth disabled={isLoading || !turnstileToken}>
+            {isLoading ? 'Creating Account...' : 'Create Account'}
+          </Button>
+        </form>
 
         <div className={styles.footer}>
           <span>Already have an account? </span>
