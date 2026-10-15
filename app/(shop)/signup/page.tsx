@@ -135,6 +135,7 @@ export default function SignupPage() {
     if (existingEmail) { setError('An account with this email already exists.'); resetTurnstile(); setIsLoading(false); return; }
 
     // Sign up with email/password - Supabase will send verification email
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
     const { error: signUpError, data } = await supabase.auth.signUp({
       email: email.toLowerCase(),
       password,
@@ -143,7 +144,7 @@ export default function SignupPage() {
           full_name: fullName,
           username: username.toLowerCase(),
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/email-verified`,
+        emailRedirectTo: `${siteUrl}/auth/callback?next=/email-verified`,
       },
     });
 

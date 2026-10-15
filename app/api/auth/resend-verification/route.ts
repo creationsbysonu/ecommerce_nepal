@@ -11,12 +11,14 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
 
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
     // Resend verification email
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: email.toLowerCase(),
       options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://mero-pasal-pw0b.onrender.com'}/auth/callback?next=/email-verified`,
+        emailRedirectTo: `${siteUrl}/auth/callback?next=/email-verified`,
       },
     })
 
