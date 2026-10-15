@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { strictRateLimiter } from '@/utils/rate-limit';
 
 /**
  * POST /api/verify-turnstile
@@ -8,6 +9,10 @@ import { NextRequest, NextResponse } from 'next/server';
  * Validates a Cloudflare Turnstile token server-side using the siteverify endpoint.
  */
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = await strictRateLimiter(request, 'verify-turnstile');
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const { token } = await request.json();
 

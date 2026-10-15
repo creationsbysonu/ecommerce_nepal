@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { strictRateLimiter } from '@/utils/rate-limit';
 
 /**
  * POST /api/auth/phone-login
@@ -27,6 +28,10 @@ function maskEmail(email: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = await strictRateLimiter(request, 'phone-login');
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const { phone } = await request.json() as { phone?: string };
 
@@ -77,13 +82,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Return masked email — client will send the OTP using the full email
-    // We also return the full email encrypted as a short-lived token approach:
-    // For simplicity we return the email directly since this is server-to-client
-    // over HTTPS and the OTP still guards access.
+    // Return ONLY masked email — client will call Supabase OTP directly
+    // We do NOT send the full email to the client to prevent user enumeration.
     return NextResponse.json({
       success: true,
-      email,
       emailHint: maskEmail(email),
     });
   } catch (err) {

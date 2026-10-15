@@ -47,5 +47,30 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Set request context for audit logging (IP, user agent)
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+             request.headers.get('x-real-ip') ||
+             request.headers.get('cf-connecting-ip') ||
+             'unknown';
+  const userAgent = request.headers.get('user-agent') || 'unknown';
+
+  // Set request context for audit logging functions
+  supabaseResponse.headers.set('x-request-ip', ip);
+  supabaseResponse.headers.set('x-request-user-agent', request.headers.get('user-agent') || '');
+
+  // Log successful login (only on auth callback)
+  if (path === '/auth/callback' && user) {
+    try {
+      await supabase.rpc('log_successful_login', { p_user_id: user.id });
+    } catch {
+      // Ignore logging errors
+    }
+  }
+
+  // Log failed login attempts on login page with error
+  if (path === '/login' && request.method === 'POST') {
+    // This will be handled by the login API
+  }
+
   return supabaseResponse
 }

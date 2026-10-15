@@ -45,33 +45,17 @@ export default function SellerRegistration() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not logged in");
 
-      // 1. Update Profile Role to Seller
-      const { error: profileErr } = await supabase
-        .from('profiles')
-        .update({ role: 'seller' })
-        .eq('id', user.id);
-      
-      if (profileErr) throw profileErr;
+      // Use atomic RPC to register seller (prevents race conditions)
+      const { data, error } = await supabase.rpc('register_seller', {
+        p_store_name: storeName,
+        p_store_description: storeDesc,
+      });
 
-      // 2. Create Store Entry
-      const { error: storeErr } = await supabase
-        .from('stores')
-        .insert({
-          seller_id: user.id,
-          name: storeName,
-          description: storeDesc,
-          is_verified: false
-        });
-
-      if (storeErr) {
-        // Rollback role if store creation fails (simple fallback)
-        await supabase.from('profiles').update({ role: 'customer' }).eq('id', user.id);
-        throw storeErr;
-      }
+      if (error) throw error;
 
       // Success - redirect to dashboard
       alert("Registration successful! Welcome to the Seller Portal.");
-      window.location.href = '/seller/dashboard'; // Full reload to ensure role updates propagate to layout
+      window.location.href = '/seller/dashboard';
 
     } catch (err) {
       console.error(err);

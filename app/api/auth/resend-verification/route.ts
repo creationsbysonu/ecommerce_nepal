@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { strictRateLimiter } from '@/utils/rate-limit'
 
 export async function POST(request: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = await strictRateLimiter(request, 'resend-verification');
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const { email } = await request.json()
 

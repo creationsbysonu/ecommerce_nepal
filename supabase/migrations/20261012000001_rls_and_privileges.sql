@@ -118,6 +118,9 @@ BEGIN
     ELSE
       NEW.role := OLD.role;
     END IF;
+
+    -- Log role change
+    PERFORM public.log_role_change(OLD.id, OLD.role, NEW.role);
   END IF;
 
   -- Money only ever moves inside place_order() / redeem_gift_card().
@@ -127,6 +130,9 @@ BEGIN
   -- The email address is owned by the auth service; allow the initial fill
   -- (phone signups have no email yet) but never a later change.
   IF OLD.email IS NOT NULL THEN
+    IF NEW.email IS DISTINCT FROM OLD.email THEN
+      PERFORM public.log_email_change(OLD.id, OLD.email, NEW.email);
+    END IF;
     NEW.email := OLD.email;
   END IF;
 
