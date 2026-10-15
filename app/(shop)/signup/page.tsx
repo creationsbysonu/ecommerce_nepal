@@ -23,12 +23,46 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendError, setResendError] = useState(false);
   const turnstileRef = useRef<TurnstileInstance>(null);
   const router = useRouter();
 
   const resetTurnstile = () => {
     setTurnstileToken(null);
     turnstileRef.current?.reset();
+  };
+
+  const handleResendEmail = async () => {
+    if (!email) return;
+
+    setIsResending(true);
+    setResendMessage(null);
+    setResendError(false);
+
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.toLowerCase() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setResendError(true);
+        setResendMessage(data.error || 'Failed to resend email');
+      } else {
+        setResendError(false);
+        setResendMessage(data.message || 'Verification email sent!');
+      }
+    } catch {
+      setResendError(true);
+      setResendMessage('Network error. Please try again.');
+    } finally {
+      setIsResending(false);
+    }
   };
 
   const validateUsername = (uname: string): string | null => {
@@ -169,9 +203,24 @@ export default function SignupPage() {
                 Go to Login
               </Button>
             </Link>
-            <p style={{ marginTop: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>
-              Didn&apos;t receive the email? <Link href="/signup" style={{ color: 'var(--brand-blue)' }}>Try again</Link>
-            </p>
+            <div style={{ marginTop: '16px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                Didn&apos;t receive the email?
+              </p>
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={handleResendEmail}
+                disabled={isResending}
+              >
+                {isResending ? 'Sending...' : 'Resend Verification Email'}
+              </Button>
+              {resendMessage && (
+                <p style={{ marginTop: '8px', fontSize: '13px', color: resendError ? 'var(--error)' : '#166534' }}>
+                  {resendMessage}
+                </p>
+              )}
+            </div>
           </div>
         ) : (
           // Signup form
