@@ -9,9 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "db:keys": "node scripts/render-keys.mjs",
-    "db:render": "node scripts/render-db-setup.mjs"
+    "lint": "eslint"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.5.3",
@@ -30,7 +28,6 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
-    "pg": "^8.23.1",
     "supabase": "^2.109.1",
     "typescript": "^5"
   }

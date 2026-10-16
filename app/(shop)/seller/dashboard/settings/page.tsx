@@ -18,23 +18,30 @@ export default function StoreSettings() {
 
   useEffect(() => {
     async function loadStore() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.push('/login?next=/seller/dashboard/settings');
+          return;
+        }
         const { data } = await supabase
           .from('stores')
           .select('name, description')
           .eq('seller_id', user.id)
-          .single();
-          
+          .maybeSingle();
+
         if (data) {
           setStoreName(data.name);
           setDescription(data.description || '');
         }
+      } catch (err) {
+        console.error('Failed to load store settings:', err);
+      } finally {
+        setIsFetching(false);
       }
-      setIsFetching(false);
     }
     loadStore();
-  }, [supabase]);
+  }, [supabase, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,24 +49,30 @@ export default function StoreSettings() {
     setError(null);
     setSuccess(null);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
 
-    const { error: updateError } = await supabase
-      .from('stores')
-      .update({
-        name: storeName,
-        description: description,
-      })
-      .eq('seller_id', user.id);
+      const { error: updateError } = await supabase
+        .from('stores')
+        .update({
+          name: storeName,
+          description: description,
+        })
+        .eq('seller_id', user.id);
 
-    if (updateError) {
-      setError(updateError.message);
-    } else {
-      setSuccess("Store settings saved successfully!");
-      router.refresh();
+      if (updateError) {
+        setError(updateError.message);
+      } else {
+        setSuccess("Store settings saved successfully!");
+        router.refresh();
+      }
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   if (isFetching) return <div style={{padding: '40px', textAlign: 'center'}}>Loading settings...</div>;

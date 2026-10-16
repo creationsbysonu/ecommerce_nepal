@@ -1,12 +1,11 @@
 import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
 import styles from './product-detail.module.css';
-import { Button } from '@/components/ui/Button';
-import { ShoppingCart } from 'lucide-react';
 import { ProductActions } from '@/components/shop/ProductActions';
 import Image from 'next/image';
 
-export default async function ProductDetailPage({ params }: { params: { id: string } }) {
+export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = await createClient();
   
   const { data: product } = await supabase
@@ -16,7 +15,8 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       stores (name),
       product_variants (image_url, sku, stock)
     `)
-    .eq('id', params.id)
+    .eq('id', id)
+    .eq('is_active', true)
     .single();
 
   if (!product) {

@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import styles from '../profile.module.css';
-import { MapPin, Trash2, Edit2 } from 'lucide-react';
+import { MapPin, Trash2 } from 'lucide-react';
 
 type Address = {
   id: string;
@@ -106,11 +106,28 @@ export default function AddressesPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // First unset all defaults
-    await supabase.from('addresses').update({ is_default: false }).eq('user_id', user.id);
-    // Then set the selected one as default
-    await supabase.from('addresses').update({ is_default: true }).eq('id', id);
-    
+    // Unset every existing default, then set the chosen one. The partial unique
+    // index permits a single default per user, so both writes are scoped to the
+    // caller and their failures are surfaced instead of silently ignored.
+    const { error: clearError } = await supabase
+      .from('addresses')
+      .update({ is_default: false })
+      .eq('user_id', user.id);
+    if (clearError) {
+      alert(`Could not update the default address: ${clearError.message}`);
+      return;
+    }
+
+    const { error: setError } = await supabase
+      .from('addresses')
+      .update({ is_default: true })
+      .eq('id', id)
+      .eq('user_id', user.id);
+    if (setError) {
+      alert(`Could not set the default address: ${setError.message}`);
+      return;
+    }
+
     fetchAddresses();
   };
 

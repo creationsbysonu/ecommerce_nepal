@@ -1,7 +1,6 @@
 'use client';
 
-import { Store, TrendingUp, ShieldCheck, Banknote, ArrowRight } from 'lucide-react';
-import Link from 'next/link';
+import { TrendingUp, ShieldCheck, Banknote, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function SellOnMeroPasal() {

@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { authRateLimiter } from '@/utils/rate-limit';
 
 type CheckoutItem = {
   productId: string;
@@ -29,7 +30,11 @@ type PlaceOrderResult = {
   duplicate: boolean;
 };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // Rate limiting (best-effort; see utils/rate-limit.ts).
+  const rateLimitResponse = await authRateLimiter(request, 'checkout');
+  if (rateLimitResponse) return rateLimitResponse;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 

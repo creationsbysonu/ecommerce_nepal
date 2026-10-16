@@ -1,7 +1,6 @@
 'use client';
 
-import { Download, Smartphone, Star, Zap } from 'lucide-react';
-import Image from 'next/image';
+import { Download, Star, Zap } from 'lucide-react';
 
 export default function DownloadAppPage() {
   return (

@@ -19,7 +19,7 @@ export default async function OrdersPage() {
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('*, order_items(*, product_variants(products(title, imageUrl:product_variants(image_url))))')
+    .select('*, order_items(id)')
     .eq('customer_id', user.id)
     .order('created_at', { ascending: false });
 

@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { TurnstileInstance } from '@marsidev/react-turnstile';
 import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import TurnstileWidget from '@/components/ui/TurnstileWidget';
-import { Mail, Phone, Lock, User, CheckCircle } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import styles from '../login/login.module.css';
 
 export default function SignupPage() {
@@ -27,7 +26,6 @@ export default function SignupPage() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState(false);
   const turnstileRef = useRef<TurnstileInstance>(null);
-  const router = useRouter();
 
   const resetTurnstile = () => {
     setTurnstileToken(null);
@@ -118,23 +116,22 @@ export default function SignupPage() {
 
     const supabase = createClient();
 
-    // Check username availability
-    const { data: existingUser } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('username', username.toLowerCase())
-      .maybeSingle();
-    if (existingUser) { setError('Username is already taken.'); resetTurnstile(); setIsLoading(false); return; }
+    // Check username availability via a narrow SECURITY DEFINER RPC. The
+    // profiles table is private under RLS, so it cannot be read directly.
+    const { data: usernameAvailable } = await supabase
+      .rpc('is_username_available', { p_username: username.toLowerCase() });
+    if (usernameAvailable === false) {
+      setError('Username is already taken.');
+      resetTurnstile();
+      setIsLoading(false);
+      return;
+    }
 
-    // Check email availability
-    const { data: existingEmail } = await supabase
-      .from('profiles')
-      .select('email')
-      .eq('email', email.toLowerCase())
-      .maybeSingle();
-    if (existingEmail) { setError('An account with this email already exists.'); resetTurnstile(); setIsLoading(false); return; }
-
-    // Sign up with email/password - Supabase will send verification email
+    // Sign up with email/password - Supabase will send the verification email.
+    // full_name / username / phone_number ride along as user metadata and are
+    // written to profiles by the handle_new_user() trigger. (A client-side
+    // profile UPDATE here would be rejected by RLS: no session exists until the
+    // email is confirmed.)
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
     const { error: signUpError, data } = await supabase.auth.signUp({
       email: email.toLowerCase(),
@@ -143,6 +140,7 @@ export default function SignupPage() {
         data: {
           full_name: fullName,
           username: username.toLowerCase(),
+          ...(phone ? { phone_number: `+977${phone}` } : {}),
         },
         emailRedirectTo: `${siteUrl}/auth/callback?next=/email-verified`,
       },
@@ -156,22 +154,8 @@ export default function SignupPage() {
     }
 
     if (data.user) {
-      // Save profile with username
-      const updates: Record<string, string> = {
-        username: username.toLowerCase(),
-        email: email.toLowerCase(),
-        full_name: fullName,
-      };
-      if (phone) updates.phone_number = `+977${phone}`;
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', data.user.id);
-
-      if (profileError) console.error('Profile update error:', profileError);
-
-      // Show success message - user needs to verify email
+      // Supabase has sent the verification link; the handle_new_user trigger is
+      // the only writer of the profile row at this point.
       setEmailSent(true);
       setMessage('Account created! Please check your email to verify your address.');
     }

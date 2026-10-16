@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import styles from './profile.module.css';
-import { User, MapPin, Package, Settings, LogOut } from 'lucide-react';
+import { User, MapPin, Package } from 'lucide-react';
 
 export default async function ProfileLayout({
   children,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { asRows } from '@/utils/supabase/rows';
 import { Package, Truck, CheckCircle, Search } from 'lucide-react';
@@ -38,75 +39,84 @@ export default function SellerOrders() {
   const [items, setItems] = useState<SellerOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     const fetchOrders = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: store } = await supabase.from('stores').select('id').eq('seller_id', user.id).single();
-      if (!store) return;
-
-      // This is a complex join. Supabase can do it if properly constructed:
-      // order_items -> orders
-      // order_items -> product_variants -> products
-      
-      const { data } = await supabase
-        .from('order_items')
-        .select(`
-          id, order_id, quantity, price_at_time, created_at,
-          orders (status, shipping_address, customer_id),
-          product_variants!inner (
-            sku, image_url,
-            products!inner (title, store_id)
-          )
-        `)
-        .eq('product_variants.products.store_id', store.id)
-        .order('created_at', { ascending: false });
-
-      if (data) {
-        // supabase-js types every embed as an array (it can't see our schema),
-        // but PostgREST returns this many-to-one embed as an object — cast to
-        // the real runtime shape rather than to the inferred one.
-        const rows = asRows<SellerOrderItem>(data);
-
-        // Customer names via profile_display_names(): profiles is no longer
-        // world-readable (it exposes email, phone and balances), so this
-        // SECURITY DEFINER function is the supported way to resolve a name
-        // for someone else's account.
-        const customerIds = [
-          ...new Set(
-            rows
-              .map((i) => i.orders?.customer_id)
-              .filter((id): id is string => typeof id === 'string')
-          ),
-        ];
-        const profilesDict: Record<string, string> = {};
-
-        if (customerIds.length > 0) {
-          const { data: names } = await supabase.rpc('profile_display_names', {
-            p_ids: customerIds,
-          });
-          names?.forEach((n: { id: string; full_name: string | null }) => {
-            profilesDict[n.id] = n.full_name || 'Unknown Customer';
-          });
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.push('/login?next=/seller/dashboard/orders');
+          return;
         }
 
-        const formatted = rows.map((item) => ({
-          ...item,
-          orders: {
-            ...item.orders,
-            profiles: { full_name: profilesDict[item.orders?.customer_id ?? ''] || 'Unknown Customer' }
-          }
-        }));
+        const { data: store } = await supabase.from('stores').select('id').eq('seller_id', user.id).maybeSingle();
+        if (!store) return;
 
-        setItems(formatted);
+        // This is a complex join. Supabase can do it if properly constructed:
+        // order_items -> orders
+        // order_items -> product_variants -> products
+        
+        const { data } = await supabase
+          .from('order_items')
+          .select(`
+            id, order_id, quantity, price_at_time, created_at,
+            orders (status, shipping_address, customer_id),
+            product_variants!inner (
+              sku, image_url,
+              products!inner (title, store_id)
+            )
+          `)
+          .eq('product_variants.products.store_id', store.id)
+          .order('created_at', { ascending: false });
+
+        if (data) {
+          // supabase-js types every embed as an array (it can't see our schema),
+          // but PostgREST returns this many-to-one embed as an object — cast to
+          // the real runtime shape rather than to the inferred one.
+          const rows = asRows<SellerOrderItem>(data);
+
+          // Customer names via profile_display_names(): profiles is no longer
+          // world-readable (it exposes email, phone and balances), so this
+          // SECURITY DEFINER function is the supported way to resolve a name
+          // for someone else's account.
+          const customerIds = [
+            ...new Set(
+              rows
+                .map((i) => i.orders?.customer_id)
+                .filter((id): id is string => typeof id === 'string')
+            ),
+          ];
+          const profilesDict: Record<string, string> = {};
+
+          if (customerIds.length > 0) {
+            const { data: names } = await supabase.rpc('profile_display_names', {
+              p_ids: customerIds,
+            });
+            names?.forEach((n: { id: string; full_name: string | null }) => {
+              profilesDict[n.id] = n.full_name || 'Unknown Customer';
+            });
+          }
+
+          const formatted = rows.map((item) => ({
+            ...item,
+            orders: {
+              ...item.orders,
+              profiles: { full_name: profilesDict[item.orders?.customer_id ?? ''] || 'Unknown Customer' }
+            }
+          }));
+
+          setItems(formatted);
+        }
+      } catch (err) {
+        console.error('Failed to load seller orders:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchOrders();
-  }, [supabase]);
+  }, [supabase, router]);
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     // Note: In a real multi-vendor app, status is per order_item, not per order,

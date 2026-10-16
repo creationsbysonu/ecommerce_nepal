@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
+import { asRows } from '@/utils/supabase/rows';
 import { DollarSign, Package, ShoppingBag, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 
@@ -12,49 +13,58 @@ export default function SellerDashboard() {
 
   useEffect(() => {
     const fetchMetrics = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-      const { data: store } = await supabase.from('stores').select('id').eq('seller_id', user.id).single();
-      if (!store) return;
+        const { data: store } = await supabase.from('stores').select('id').eq('seller_id', user.id).maybeSingle();
+        if (!store) return;
 
-      // Count Products
-      const { count: productCount } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('store_id', store.id);
+        // Count Products
+        const { count: productCount } = await supabase
+          .from('products')
+          .select('*', { count: 'exact', head: true })
+          .eq('store_id', store.id);
 
-      // Count Orders & Revenue
-      // We need to find order_items that belong to this store's products
-      // Due to the complex relation (order_items -> product_variants -> products -> store), 
-      // we'll fetch products first to get IDs, then query variants, then query order_items
-      
-      const { data: products } = await supabase.from('products').select('id').eq('store_id', store.id);
-      const productIds = products?.map(p => p.id) || [];
-      
-      let revenue = 0;
-      let orderCount = 0;
+        // Revenue/orders are derived from this store's variants.
+        const { data: products } = await supabase.from('products').select('id').eq('store_id', store.id);
+        const productIds = products?.map(p => p.id) || [];
 
-      if (productIds.length > 0) {
-        const { data: variants } = await supabase.from('product_variants').select('id').in('product_id', productIds);
-        const variantIds = variants?.map(v => v.id) || [];
-        
-        if (variantIds.length > 0) {
-          const { data: orderItems } = await supabase
-            .from('order_items')
-            .select('quantity, price_at_time, order_id')
-            .in('product_variant_id', variantIds);
-            
-          if (orderItems) {
-            revenue = orderItems.reduce((acc, item) => acc + (item.quantity * item.price_at_time), 0);
-            const uniqueOrders = new Set(orderItems.map(item => item.order_id));
-            orderCount = uniqueOrders.size;
+        let revenue = 0;
+        let orderCount = 0;
+
+        if (productIds.length > 0) {
+          const { data: variants } = await supabase.from('product_variants').select('id').in('product_id', productIds);
+          const variantIds = variants?.map(v => v.id) || [];
+
+          if (variantIds.length > 0) {
+            const { data: orderItems } = await supabase
+              .from('order_items')
+              .select('quantity, price_at_time, order_id, orders(status)')
+              .in('product_variant_id', variantIds);
+
+            // Only count orders that were actually settled — pending and
+            // cancelled orders must not inflate revenue.
+            const settled = asRows<{
+              quantity: number;
+              price_at_time: number;
+              order_id: string;
+              orders: { status: string } | null;
+            }>(orderItems).filter(
+              (item) => item.orders && ['paid', 'processing', 'shipped', 'delivered'].includes(item.orders.status)
+            );
+
+            revenue = settled.reduce((acc, item) => acc + item.quantity * item.price_at_time, 0);
+            orderCount = new Set(settled.map((item) => item.order_id)).size;
           }
         }
-      }
 
-      setMetrics({ revenue, products: productCount || 0, orders: orderCount });
-      setLoading(false);
+        setMetrics({ revenue, products: productCount || 0, orders: orderCount });
+      } catch (err) {
+        console.error('Failed to load seller metrics:', err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchMetrics();
@@ -81,8 +91,8 @@ export default function SellerDashboard() {
               <DollarSign size={24} />
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#10b981', fontWeight: 600 }}>
-            <TrendingUp size={16} /> +12% from last month
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            <TrendingUp size={16} /> From settled orders
           </div>
         </div>
 

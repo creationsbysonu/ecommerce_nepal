@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, message: 'Verification email sent!' })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    console.error('Resend verification error:', error)
+    return NextResponse.json({ error: 'Unable to resend the email right now.' }, { status: 500 })
   }
 }

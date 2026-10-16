@@ -1,32 +1,11 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import styles from '../login/login.module.css';
 
+// The verification itself happens server-side in /auth/callback; this page is
+// the terminal success screen, so there is no async state to manage.
 export default function EmailVerifiedPage() {
-  const [verified, setVerified] = useState(false);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    // The verification happens server-side via /auth/callback
-    // This page just shows the success state after redirect
-    setVerified(true);
-  }, []);
-
-  if (!verified) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.loginBox} style={{ textAlign: 'center', padding: '60px 40px' }}>
-          <Loader2 size={48} className="animate-spin" style={{ margin: '0 auto 24px', color: 'var(--brand-blue)' }} />
-          <p style={{ color: 'var(--text-muted)' }}>Verifying your email...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={styles.container}>
       <div className={styles.loginBox} style={{ textAlign: 'center', padding: '60px 40px' }}>

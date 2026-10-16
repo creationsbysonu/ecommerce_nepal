@@ -9,3 +9,8 @@ README.md
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Local secrets must never be baked into image layers
+notes.txt
+supabase/config.toml
+.render-secrets

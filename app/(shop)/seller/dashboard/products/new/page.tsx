@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { ArrowLeft, Upload, Package } from 'lucide-react';
+import { ArrowLeft, Package } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function NewProduct() {
   const router = useRouter();
@@ -70,7 +71,11 @@ export default function NewProduct() {
           image_url: imageUrl || null
         });
 
-      if (varErr) throw varErr;
+      if (varErr) {
+        // Don't leave a variant-less orphan product behind (e.g. a duplicate SKU).
+        await supabase.from('products').delete().eq('id', product.id);
+        throw varErr;
+      }
 
       router.push('/seller/dashboard/products');
       
@@ -148,7 +153,7 @@ export default function NewProduct() {
             
             <div style={{ width: '100%', paddingTop: '100%', position: 'relative', background: '#f8fafc', borderRadius: '8px', border: '1px dashed var(--border)', marginBottom: '16px' }}>
               {imageUrl ? (
-                 <img src={imageUrl} alt="Preview" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', padding: '8px' }} />
+                 <Image src={imageUrl} alt="Preview" fill style={{ objectFit: 'contain', padding: '8px' }} />
               ) : (
                  <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
                    <Package size={32} style={{ marginBottom: '8px' }} />

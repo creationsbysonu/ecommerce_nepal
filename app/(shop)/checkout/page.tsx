@@ -6,7 +6,8 @@ import { createClient } from '@/utils/supabase/client';
 import { useCartStore } from '@/store/useCartStore';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
-import { Tag, Coins, Wallet, CheckCircle, AlertCircle } from 'lucide-react';
+import Image from 'next/image';
+import { Tag, Coins, Wallet } from 'lucide-react';
 
 type Address = {
   id: string;
@@ -52,8 +53,9 @@ export default function CheckoutPage() {
 
   // One idempotency key per checkout session: a retried or double-clicked
   // submit reuses it, so place_order() returns the original order rather than
-  // debiting the wallet or the stock twice.
-  const clientReference = useRef(crypto.randomUUID());
+  // debiting the wallet or the stock twice. Generated on first submit so no
+  // impure work runs during render.
+  const clientReference = useRef<string>('');
 
   // Coupon State
   const [couponCode, setCouponCode] = useState('');
@@ -202,6 +204,13 @@ export default function CheckoutPage() {
 
     setPlacingOrder(true);
 
+    // Stable per-session idempotency key (created once, on first submit).
+    const reference =
+      clientReference.current ||
+      (clientReference.current =
+        globalThis.crypto?.randomUUID?.() ??
+        `chk-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
     try {
       // Only the identity of the cart lines is sent — never prices or totals:
       // place_order() recomputes everything from the database (subtotal,
@@ -213,7 +222,7 @@ export default function CheckoutPage() {
           items: items.map(i => ({ productId: i.productId, quantity: i.quantity })),
           addressId: selectedAddressId,
           paymentMethod,
-          clientReference: clientReference.current,
+          clientReference: reference,
           couponCode: appliedCoupon?.code ?? null,
           coinsUsed: useCoins ? coinsToDeduct : 0,
         })
@@ -228,7 +237,7 @@ export default function CheckoutPage() {
         alert('Error placing order: ' + data.error);
         setPlacingOrder(false);
       }
-    } catch (err) {
+    } catch {
       alert('Network error');
       setPlacingOrder(false);
     }
@@ -293,7 +302,7 @@ export default function CheckoutPage() {
               <div key={item.productId} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
                 <div style={{ display: 'flex', gap: '16px' }}>
                   <div style={{ width: '60px', height: '60px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
-                    {item.imageUrl && <img src={item.imageUrl} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                    {item.imageUrl && <Image src={item.imageUrl} alt={item.title} width={60} height={60} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                   </div>
                   <div>
                     <h3 style={{ fontSize: '15px', fontWeight: 500, marginBottom: '4px' }}>{item.title}</h3>

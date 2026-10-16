@@ -113,6 +113,10 @@ export default function SupportPage() {
               <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Message Sent!</h3>
               <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>We&apos;ll get back to you shortly.</p>
             </div>
+          ) : signedIn === null ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+              Checking your session…
+            </div>
           ) : signedIn === false ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <MessageCircle size={48} color="var(--text-muted)" style={{ margin: '0 auto 16px' }} />

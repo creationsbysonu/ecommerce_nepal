@@ -1,6 +1,9 @@
 import { createClient } from '@/utils/supabase/server';
 import styles from '../admin.module.css';
 import { revalidatePath } from 'next/cache';
+import { requireAdmin } from '@/utils/auth-guard';
+
+const ALLOWED_ROLES = ['customer', 'seller', 'admin'];
 
 export default async function UsersManagement() {
   const supabase = await createClient();
@@ -10,13 +13,22 @@ export default async function UsersManagement() {
     .select('*')
     .order('created_at', { ascending: false });
 
-  // Server action to promote user (if needed in future)
+  // Server action to change a user's role.
   async function updateUserRole(formData: FormData) {
     'use server';
     const userId = formData.get('userId') as string;
     const newRole = formData.get('role') as string;
-    const supabaseServer = await createClient();
-    await supabaseServer.from('profiles').update({ role: newRole }).eq('id', userId);
+    if (!userId || !ALLOWED_ROLES.includes(newRole)) return;
+
+    const { supabase: supabaseServer, user } = await requireAdmin();
+    // Never let an admin demote themselves out of the last admin seat by mistake.
+    if (user.id === userId && newRole !== 'admin') return;
+
+    const { error } = await supabaseServer
+      .from('profiles')
+      .update({ role: newRole })
+      .eq('id', userId);
+    if (error) console.error('updateUserRole failed:', error.message);
     revalidatePath('/admin/users');
   }
 

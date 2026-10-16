@@ -4,11 +4,9 @@ import { useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { TurnstileInstance } from '@marsidev/react-turnstile';
-import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import TurnstileWidget from '@/components/ui/TurnstileWidget';
-import { Mail, Phone, Lock } from 'lucide-react';
 import styles from './login.module.css';
 
 function LoginForm() {
@@ -33,10 +31,6 @@ function LoginForm() {
     turnstileRef.current?.reset();
   };
 
-  // Check if identifier is email or phone
-  const isEmail = (str: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
-  const isPhone = (str: string) => /^(\+977)?(97|98)\d{8}$/.test(str.replace(/\D/g, ''));
-
   // ── Password Login (email or phone) ──────────────────────────────────────
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,64 +49,29 @@ function LoginForm() {
 
     setIsLoading(true);
 
-    // Verify Turnstile
-    const verifyRes = await fetch('/api/verify-turnstile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: turnstileToken }),
-    });
-    const verifyData = await verifyRes.json() as { success: boolean; error?: string };
-    if (!verifyData.success) {
-      setError(verifyData.error ?? 'Security check failed. Please try again.');
-      resetTurnstile();
-      setIsLoading(false);
-      return;
-    }
+    try {
+      // The server resolves phone→email, verifies Turnstile and signs in, so
+      // the account e-mail never reaches the browser.
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, password, turnstileToken }),
+      });
+      const data = (await res.json()) as { success: boolean; error?: string };
 
-    const supabase = createClient();
-
-    let emailToUse = identifier.trim().toLowerCase();
-
-    // If identifier is phone, look up email by phone
-    if (isPhone(identifier)) {
-      const cleanPhone = identifier.replace(/\D/g, '');
-      const fullPhone = cleanPhone.startsWith('977') ? `+${cleanPhone}` : `+977${cleanPhone}`;
-      
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('phone_number', fullPhone)
-        .maybeSingle();
-
-      if (profileError || !profile) {
-        setError('No account found with this phone number.');
+      if (!res.ok || !data.success) {
+        setError(data.error ?? 'Login failed. Please try again.');
         resetTurnstile();
-        setIsLoading(false);
-        return;
+      } else {
+        router.push(nextPath ?? '/');
+        router.refresh();
       }
-      emailToUse = profile.email;
-    }
-    // If identifier is not email, assume it's email (not username anymore)
-    else if (!isEmail(identifier)) {
-      setError('Please enter a valid email or Nepali phone number.');
+    } catch {
+      setError('Network error. Please try again.');
       resetTurnstile();
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: emailToUse,
-      password,
-    });
-
-    if (signInError) {
-      setError('Invalid email/phone or password.');
-      resetTurnstile();
-    } else {
-      router.push(nextPath ?? '/');
-      router.refresh();
-    }
-    setIsLoading(false);
   };
 
   return (

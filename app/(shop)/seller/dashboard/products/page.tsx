@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { asRows } from '@/utils/supabase/rows';
 import Link from 'next/link';
-import { Plus, Edit, Trash2, Package } from 'lucide-react';
+import { Plus, Trash2, Package } from 'lucide-react';
 import Image from 'next/image';
 
 type SellerProductRow = {
@@ -25,24 +25,29 @@ export default function SellerProducts() {
   useEffect(() => {
     // Loader inlined into the effect (setState runs only after awaits resolve).
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-      const { data: store } = await supabase.from('stores').select('id').eq('seller_id', user.id).single();
-      if (!store) return;
+        const { data: store } = await supabase.from('stores').select('id').eq('seller_id', user.id).maybeSingle();
+        if (!store) return;
 
-      const { data } = await supabase
-        .from('products')
-        .select(`
-          id, title, base_price, is_active, created_at,
-          categories (name),
-          product_variants (id, stock, image_url, sku)
-        `)
-        .eq('store_id', store.id)
-        .order('created_at', { ascending: false });
+        const { data } = await supabase
+          .from('products')
+          .select(`
+            id, title, base_price, is_active, created_at,
+            categories (name),
+            product_variants (id, stock, image_url, sku)
+          `)
+          .eq('store_id', store.id)
+          .order('created_at', { ascending: false });
 
-      if (data) setProducts(asRows<SellerProductRow>(data));
-      setLoading(false);
+        if (data) setProducts(asRows<SellerProductRow>(data));
+      } catch (err) {
+        console.error('Failed to load products:', err);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [supabase]);
 
@@ -126,7 +131,6 @@ export default function SellerProducts() {
                     </td>
                     <td style={{ padding: '16px' }}>
                       <div style={{ display: 'flex', gap: '12px' }}>
-                        <button style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><Edit size={18} /></button>
                         <button onClick={() => handleDelete(product.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={18} /></button>
                       </div>
                     </td>

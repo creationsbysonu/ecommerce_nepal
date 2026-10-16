@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { AlertCircle, CheckCircle } from 'lucide-react';
 import styles from '../login/login.module.css';
 
 export default function UpdatePassword() {

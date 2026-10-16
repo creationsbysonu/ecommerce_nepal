@@ -1,45 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Simple in-memory rate limiter with sliding window
-// For production, consider using Redis or Vercel's KV store
+/**
+ * Best-effort in-memory rate limiter.
+ *
+ * IMPORTANT: this Map lives in a single Node process. On a serverless platform
+ * (Vercel) requests can be served by different isolates, so the effective limit
+ * is per-instance, not global. It still stops naive bursts and is a cheap first
+ * line of defence, but for real protection put this behind an edge firewall or
+ * a shared store (Upstash Redis / Vercel KV). Supabase Auth applies its own
+ * server-side limits to sign-in attempts as well.
+ */
+
 interface RateLimitConfig {
-  interval: number; // Time window in milliseconds
-  maxRequests: number; // Max requests per window
+  /** Time window in milliseconds. */
+  interval: number;
+  /** Max requests allowed per window. */
+  maxRequests: number;
 }
 
-const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
+}
+
+const store = new Map<string, RateLimitEntry>();
+
+// Drop expired buckets so the Map cannot grow without bound.
+function sweep(now: number) {
+  if (store.size < 500) return;
+  for (const [key, value] of store.entries()) {
+    if (value.resetTime < now) store.delete(key);
+  }
+}
+
+/**
+ * Resolve the client IP from platform headers. Vercel sets x-forwarded-for and
+ * x-real-ip itself, so they cannot be spoofed by the caller there. Deliberately
+ * keyed on IP alone — mixing in a user agent let a caller reset their bucket by
+ * rotating it.
+ */
+export function getClientIp(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  const realIp = request.headers.get('x-real-ip');
+  const cfIp = request.headers.get('cf-connecting-ip');
+  return cfIp || realIp || forwarded?.split(',')[0]?.trim() || 'unknown';
+}
 
 export function createRateLimiter(config: RateLimitConfig) {
   const { interval, maxRequests } = config;
 
   return async function rateLimit(
     request: NextRequest,
-    key: string = 'global'
+    key = 'global'
   ): Promise<NextResponse | null> {
-    const identifier = `${key}:${getClientIdentifier(request)}`;
     const now = Date.now();
-    const windowStart = now - interval;
+    sweep(now);
 
-    // Clean up old entries
-    for (const [key, value] of rateLimitStore.entries()) {
-      if (value.resetTime < now) {
-        rateLimitStore.delete(key);
-      }
-    }
+    const identifier = `${key}:${getClientIp(request)}`;
+    const current = store.get(identifier);
 
-    const current = rateLimitStore.get(identifier) || { count: 0, resetTime: now + interval };
-
-    if (current.resetTime < now) {
-      // Window expired, reset
-      current.count = 1;
-      current.resetTime = now + interval;
-      rateLimitStore.set(identifier, current);
-      return null; // Allow request
+    if (!current || current.resetTime <= now) {
+      store.set(identifier, { count: 1, resetTime: now + interval });
+      return null;
     }
 
     if (current.count >= maxRequests) {
-      // Rate limited
-      const retryAfter = Math.ceil((current.resetTime - now) / 1000);
+      const retryAfter = Math.max(1, Math.ceil((current.resetTime - now) / 1000));
       return NextResponse.json(
         { error: 'Too many requests. Please try again later.' },
         {
@@ -54,55 +80,25 @@ export function createRateLimiter(config: RateLimitConfig) {
       );
     }
 
-    current.count++;
-    rateLimitStore.set(identifier, current);
-
-    // Add rate limit headers to response
-    const response = NextResponse.next();
-    response.headers.set('X-RateLimit-Limit', maxRequests.toString());
-    response.headers.set('X-RateLimit-Remaining', (maxRequests - current.count).toString());
-    response.headers.set('X-RateLimit-Reset', Math.ceil(current.resetTime / 1000).toString());
-
-    return null; // Allow request
+    current.count += 1;
+    return null;
   };
 }
 
-function getClientIdentifier(request: NextRequest): string {
-  // Try to get real IP from headers
-  const forwarded = request.headers.get('x-forwarded-for');
-  const realIp = request.headers.get('x-real-ip');
-  const cfIp = request.headers.get('cf-connecting-ip');
-
-  const ip = cfIp || realIp || forwarded?.split(',')[0]?.trim() || 'unknown';
-
-  // Also include user agent for additional uniqueness
-  const userAgent = request.headers.get('user-agent') || 'unknown';
-
-  return `${ip}:${hashString(userAgent)}`;
-}
-
-function hashString(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash).toString(36);
-}
-
-// Pre-configured limiters
+/** 10 requests / minute — for ordinary API routes. */
 export const authRateLimiter = createRateLimiter({
-  interval: 60 * 1000, // 1 minute
-  maxRequests: 10, // 10 requests per minute
+  interval: 60 * 1000,
+  maxRequests: 10,
 });
 
+/** 60 requests / minute — for general API traffic. */
 export const apiRateLimiter = createRateLimiter({
-  interval: 60 * 1000, // 1 minute
-  maxRequests: 60, // 60 requests per minute
+  interval: 60 * 1000,
+  maxRequests: 60,
 });
 
+/** 5 requests / minute — for sensitive endpoints (login, signup, tokens). */
 export const strictRateLimiter = createRateLimiter({
-  interval: 60 * 1000, // 1 minute
-  maxRequests: 5, // 5 requests per minute (for sensitive endpoints)
+  interval: 60 * 1000,
+  maxRequests: 5,
 });

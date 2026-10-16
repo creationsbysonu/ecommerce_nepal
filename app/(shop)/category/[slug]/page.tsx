@@ -1,16 +1,16 @@
 import { createClient } from '@/utils/supabase/server';
 import { ProductCard } from '@/components/shop/ProductCard';
-import { notFound } from 'next/navigation';
 import { LayoutGrid } from 'lucide-react';
 
-export default async function CategoryPage({ params }: { params: { slug: string } }) {
+export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const supabase = await createClient();
 
   // Find category id based on slug
   const { data: category } = await supabase
     .from('categories')
     .select('id, name')
-    .eq('slug', params.slug)
+    .eq('slug', slug)
     .single();
 
   if (!category) {
@@ -26,7 +26,7 @@ export default async function CategoryPage({ params }: { params: { slug: string 
     query = query.eq('category_id', category.id);
   } else {
     // Basic fallback: search in title or description if slug doesn't match an exact category
-    query = query.ilike('title', `%${params.slug}%`);
+    query = query.ilike('title', `%${slug}%`);
   }
 
   const { data: products } = await query;
@@ -34,7 +34,7 @@ export default async function CategoryPage({ params }: { params: { slug: string 
   return (
     <div className="container" style={{ padding: '40px 16px', minHeight: 'calc(100vh - var(--header-height))' }}>
       <h1 style={{ fontSize: '28px', fontWeight: 800, marginBottom: '24px', textTransform: 'capitalize' }}>
-        {category ? category.name : params.slug.replace('-', ' ')}
+        {category ? category.name : slug.replace('-', ' ')}
       </h1>
 
       {(!products || products.length === 0) ? (

@@ -1,5 +1,4 @@
 import styles from "./page.module.css";
-import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { CategoryNav } from "@/components/shop/CategoryNav";

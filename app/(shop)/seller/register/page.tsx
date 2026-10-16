@@ -46,7 +46,7 @@ export default function SellerRegistration() {
       if (!user) throw new Error("Not logged in");
 
       // Use atomic RPC to register seller (prevents race conditions)
-      const { data, error } = await supabase.rpc('register_seller', {
+      const { error } = await supabase.rpc('register_seller', {
         p_store_name: storeName,
         p_store_description: storeDesc,
       });

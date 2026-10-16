@@ -41,7 +41,7 @@ export default function CoinsPage() {
       setLoading(false);
     };
     load();
-  }, []);
+  }, [supabase]);
 
   if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading coins...</div>;
 

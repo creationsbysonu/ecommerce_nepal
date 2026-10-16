@@ -5,7 +5,6 @@ import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { User, Mail, Phone, Shield, CheckCircle } from 'lucide-react';
-import styles from '../profile.module.css';
 
 type Profile = {
   full_name: string | null;
@@ -58,7 +57,7 @@ export default function ProfileInfoPage() {
     };
 
     loadProfile();
-  }, []);
+  }, [supabase]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

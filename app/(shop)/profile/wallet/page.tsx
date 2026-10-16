@@ -37,7 +37,7 @@ export default function WalletPage() {
       setLoading(false);
     };
     load();
-  }, []);
+  }, [supabase]);
 
   if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading wallet...</div>;
 

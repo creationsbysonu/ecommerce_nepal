@@ -14,20 +14,16 @@ export async function createClient() {
         },
         setAll(cookiesToSet) {
           try {
+            // Pass options through unchanged. Supabase sets the correct
+            // maxAge/expiry/sameSite for the session and PKCE cookies; forcing
+            // our own values here used to fight the refresh-token lifecycle.
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, {
-                ...options,
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                path: '/',
-                maxAge: 60 * 60 * 24 * 7, // 1 week
-              })
+              cookieStore.set(name, value, options)
             })
-          } catch (error) {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
+          } catch {
+            // `set` throws when called from a Server Component render. The
+            // proxy (middleware) refreshes the session on the next request, so
+            // this is safe to ignore.
           }
         },
       },

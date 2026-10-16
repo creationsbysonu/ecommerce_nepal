@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { createClient } from '@/utils/supabase/client';
 import { Heart, ShoppingCart, Trash2, Package } from 'lucide-react';
 import { useCartStore } from '@/store/useCartStore';
-import styles from '../profile.module.css';
 
 type WishlistItem = {
   id: string;

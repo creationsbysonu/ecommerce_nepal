@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import styles from '../admin.module.css';
 import { revalidatePath } from 'next/cache';
+import { requireAdmin } from '@/utils/auth-guard';
 
 export default async function CategoryManagement() {
   const supabase = await createClient();
@@ -12,18 +13,25 @@ export default async function CategoryManagement() {
 
   async function addCategory(formData: FormData) {
     'use server';
-    const name = formData.get('name') as string;
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const supabaseServer = await createClient();
-    await supabaseServer.from('categories').insert({ name, slug });
+    const name = (formData.get('name') as string)?.trim();
+    if (!name) return;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!slug) return;
+
+    const { supabase: supabaseServer } = await requireAdmin();
+    const { error } = await supabaseServer.from('categories').insert({ name, slug });
+    if (error) console.error('addCategory failed:', error.message);
     revalidatePath('/admin/categories');
   }
 
   async function deleteCategory(formData: FormData) {
     'use server';
     const id = formData.get('id') as string;
-    const supabaseServer = await createClient();
-    await supabaseServer.from('categories').delete().eq('id', id);
+    if (!id) return;
+
+    const { supabase: supabaseServer } = await requireAdmin();
+    const { error } = await supabaseServer.from('categories').delete().eq('id', id);
+    if (error) console.error('deleteCategory failed:', error.message);
     revalidatePath('/admin/categories');
   }
 

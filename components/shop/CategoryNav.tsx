@@ -1,5 +1,4 @@
 import styles from './category-nav.module.css';
-import Image from 'next/image';
 import Link from 'next/link';
 import { ShoppingBag, Smartphone, Sparkles, Monitor, Home, Utensils, Baby, Car, Bike, Dumbbell, Book, Sofa } from 'lucide-react';
 
@@ -23,8 +22,8 @@ export function CategoryNav() {
   return (
     <div className={styles.categoryNavWrapper}>
       <div className={`container ${styles.categoryNav}`}>
-        {categories.map((cat, index) => (
-          <Link href={`/category/${cat.name.toLowerCase()}`} key={index} className={`${styles.categoryItem} ${cat.isActive ? styles.active : ''}`}>
+        {categories.map((cat) => (
+          <Link href={`/category/${cat.name.toLowerCase()}`} key={cat.name} className={`${styles.categoryItem} ${cat.isActive ? styles.active : ''}`}>
             <div className={styles.iconWrapper}>
               {cat.icon}
             </div>

@@ -48,7 +48,7 @@ export default function CouponsPage() {
       setLoading(false);
     };
     load();
-  }, []);
+  }, [supabase]);
 
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);

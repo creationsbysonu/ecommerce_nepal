@@ -1,6 +1,9 @@
 import { createClient } from '@/utils/supabase/server';
 import styles from '../admin.module.css';
 import { revalidatePath } from 'next/cache';
+import { requireAdmin } from '@/utils/auth-guard';
+
+const ALLOWED_STATUSES = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled'];
 
 export default async function OrdersManagement() {
   const supabase = await createClient();
@@ -14,8 +17,14 @@ export default async function OrdersManagement() {
     'use server';
     const orderId = formData.get('orderId') as string;
     const status = formData.get('status') as string;
-    const supabaseServer = await createClient();
-    await supabaseServer.from('orders').update({ status }).eq('id', orderId);
+    if (!orderId || !ALLOWED_STATUSES.includes(status)) return;
+
+    const { supabase: supabaseServer } = await requireAdmin();
+    const { error } = await supabaseServer
+      .from('orders')
+      .update({ status })
+      .eq('id', orderId);
+    if (error) console.error('updateOrderStatus failed:', error.message);
     revalidatePath('/admin/orders');
   }
 
